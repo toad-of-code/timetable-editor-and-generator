@@ -17,13 +17,13 @@ A comprehensive, real-time timetable management system built with **React**, **T
 ## Visuals
 
 ### Single Student View
-![Student Custom Timetable](.\screenshots\custom_tt.png)
+![Student Custom Timetable](./screenshots/custom_tt.png)
 
 ### Master Occupancy
-![Master Room Grid](.\screenshots\master_view.png)
+![Master Room Grid](./screenshots/master_view.png)
 
 ### Free Room Finder
-![Free Room Grid](.\screenshots\free_room.png)
+![Free Room Grid](./screenshots/free_room.png)
 
 ## Tech Stack
 
