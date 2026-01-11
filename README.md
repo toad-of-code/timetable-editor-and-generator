@@ -1,4 +1,3 @@
-```markdown
 # Campus Timetable & Occupancy Manager
 
 A comprehensive, real-time timetable management system built with **React**, **TypeScript**, and **Supabase**. This application allows administrators to import schedule data and provides students, faculty, and staff with specialized views to visualize schedules, find free rooms, and generate PDF exports.
@@ -17,10 +16,14 @@ A comprehensive, real-time timetable management system built with **React**, **T
 
 ## Visuals
 
-> **Note:** Add screenshots of your application here.
-> * *Screenshot 1: The Student Custom Timetable view with the subject filter open.*
-> * *Screenshot 2: The Master Room Occupancy grid.*
-> * *Screenshot 3: The Free Room Finder.*
+### Single Student View
+![Student Custom Timetable](src\assets\custom_tt.png)
+
+### Master Occupancy
+![Master Room Grid](src\assets\master_view.png)
+
+### Free Room Finder
+![Free Room Grid](src\assets\free_room.png)
 
 ## Tech Stack
 
@@ -117,7 +120,7 @@ Pull requests are welcome. For major changes, please open an issue first to disc
 
 ## License
 
-[MIT](https://choosealicense.com/licenses/mit/)
+[MIT](LICENSE)
 
 ## Authors
 
@@ -127,7 +130,4 @@ Pull requests are welcome. For major changes, please open an issue first to disc
 
 * Inspiration from [Make a README](https://www.makeareadme.com/)
 * Icons provided by [Lucide](https://lucide.dev/)
-
-```
-
 ```
