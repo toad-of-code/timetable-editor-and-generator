@@ -17,13 +17,13 @@ A comprehensive, real-time timetable management system built with **React**, **T
 ## Visuals
 
 ### Single Student View
-![Student Custom Timetable](src\assets\custom_tt.png)
+![Student Custom Timetable](.\src\assets\custom_tt.png)
 
 ### Master Occupancy
-![Master Room Grid](src\assets\master_view.png)
+![Master Room Grid](.\src\assets\master_view.png)
 
 ### Free Room Finder
-![Free Room Grid](src\assets\free_room.png)
+![Free Room Grid](.\src\assets\free_room.png)
 
 ## Tech Stack
 
@@ -130,4 +130,3 @@ Pull requests are welcome. For major changes, please open an issue first to disc
 
 * Inspiration from [Make a README](https://www.makeareadme.com/)
 * Icons provided by [Lucide](https://lucide.dev/)
-```
