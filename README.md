@@ -17,13 +17,13 @@ A comprehensive, real-time timetable management system built with **React**, **T
 ## Visuals
 
 ### Single Student View
-![Student Custom Timetable](.\src\assets\custom_tt.png)
+![Student Custom Timetable](.\screenshots\custom_tt.png)
 
 ### Master Occupancy
-![Master Room Grid](.\src\assets\master_view.png)
+![Master Room Grid](.\screenshots\master_view.png)
 
 ### Free Room Finder
-![Free Room Grid](.\src\assets\free_room.png)
+![Free Room Grid](.\screenshots\free_room.png)
 
 ## Tech Stack
 
@@ -39,10 +39,10 @@ Use [npm](https://www.npmjs.com/) to install the dependencies.
 
 ```bash
 # Clone the repository
-git clone [https://github.com/yourusername/campus-timetable-manager.git](https://github.com/yourusername/campus-timetable-manager.git)
+git clone https://github.com/toad-of-code/timetable-editor-and-generator.git
 
 # Navigate to the directory
-cd campus-timetable-manager
+cd timetable-editor-and-generator
 
 # Install dependencies
 npm install
