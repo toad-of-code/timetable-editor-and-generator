@@ -342,7 +342,7 @@ export function ProfessorTimetableViewer({ onBack }: ProfessorTimetableViewerPro
 
       {/* Main Table */}
       <div className="overflow-x-auto bg-white p-1 shadow-lg border border-gray-300 rounded-sm">
-        <div ref={pdfRef} className="min-w-max bg-white p-2">
+        <div ref={pdfRef} className="min-w-max">
             {/* Removed table-fixed for fluid layout */}
             <table className="w-full border-collapse border border-black text-center text-xs">
             <thead>

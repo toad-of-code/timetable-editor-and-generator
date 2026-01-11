@@ -318,7 +318,7 @@ export function RoomTimetableViewer({ onBack }: RoomTimetableViewerProps) {
       {/* Main Table Container */}
       <div className="flex-1 overflow-auto bg-white p-2">
 
-        <div ref={pdfRef}>
+        <div ref={pdfRef} className="min-w-max">
           {/* Removed table-fixed for fluid layout */}
           <table className="w-full border-collapse border border-black text-center text-xs">
             <thead>

@@ -376,7 +376,7 @@ export const TimetableViewer: React.FC<ViewerProps> = ({ timetableId, onBack }) 
       </div>
 
       <div className="overflow-x-auto bg-white p-1 shadow-lg border border-gray-300 rounded-sm">
-        <div ref={pdfRef} >
+        <div ref={pdfRef} className="min-w-max">
           <table className="w-full border-collapse border border-black text-center text-xs">
             <thead>
               <tr className="bg-[#e6b8af] h-10">
