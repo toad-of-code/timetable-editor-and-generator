@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { Download, ArrowLeft, Loader2, MapPin } from 'lucide-react';
+import { Download, ArrowLeft, Loader2, MapPin, Building2 } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import jsPDF from 'jspdf';
 
@@ -28,7 +28,7 @@ interface TimeColumn {
   label: string;
   start: string;
   end: string;
-  isLunch?: boolean; // Used for both Lunch and Break styling
+  isLunch?: boolean;
 }
 
 const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI'];
@@ -38,21 +38,39 @@ const convertTo12Hour = (time24: string) => {
   if (!time24) return '';
   const [hourStr, minute] = time24.split(':');
   let hour = parseInt(hourStr);
-  const suffix = hour >= 12 ? 'PM' : 'AM';
+  // const suffix = hour >= 12 ? 'PM' : '';
   hour = hour % 12 || 12; 
-  return `${hour}:${minute} ${suffix}`;
+  return `${hour}:${minute}`;
 };
 
 export function MasterRoomViewer({ onBack }: MasterRoomViewerProps) {
   const [loading, setLoading] = useState(true);
   const [allSlots, setAllSlots] = useState<FetchedSlot[]>([]);
+  
+  // --- Filtering State ---
+  const [availableBuildings, setAvailableBuildings] = useState<string[]>([]);
+  const [selectedBuilding, setSelectedBuilding] = useState<string>('All');
+
   const pdfRef = useRef<HTMLDivElement>(null);
 
-  // --- Helpers ---
+  // --- Helper: Extract Value ---
   const extractVal = (data: any, key: string) => {
     if (!data) return 'N/A';
     if (Array.isArray(data)) return data.length > 0 ? data[0][key] : 'N/A';
     return data[key] || 'N/A';
+  };
+
+  // --- Helper: Extract Building Name ---
+  const getBuildingName = (roomName: string) => {
+    if (!roomName) return 'Other';
+    const parts = roomName.split('-');
+
+    // If it starts with "CC", grab the first two parts (e.g., "CC-3")
+    if (parts[0] === 'CC' && parts.length >= 2) {
+        return `${parts[0]}-${parts[1]}`; 
+    }
+    // For everything else (LT, etc.), just grab the prefix
+    return parts[0]; 
   };
 
   // --- 1. Load ALL Data ---
@@ -95,6 +113,11 @@ export function MasterRoomViewer({ onBack }: MasterRoomViewerProps) {
 
       setAllSlots(cleanSlots);
 
+      // Extract unique buildings
+      const uniqueRooms = Array.from(new Set(cleanSlots.map(s => s.room_name)));
+      const buildings = Array.from(new Set(uniqueRooms.map(r => getBuildingName(r)))).sort();
+      setAvailableBuildings(buildings);
+
     } catch (err) {
       console.error('Error loading room data:', err);
     } finally {
@@ -106,46 +129,48 @@ export function MasterRoomViewer({ onBack }: MasterRoomViewerProps) {
     loadAllData();
   }, [loadAllData]);
 
-  // --- 2. Dynamic Columns (With Break & Lunch) ---
+  // --- 2. Filter Slots by Building ---
+  const filteredSlots = useMemo(() => {
+      if (selectedBuilding === 'All') return allSlots;
+      return allSlots.filter(s => getBuildingName(s.room_name) === selectedBuilding);
+  }, [allSlots, selectedBuilding]);
+
+  // --- 3. Dynamic Columns (Using Filtered Slots) ---
   const dynamicTimeColumns = useMemo(() => {
-    if (allSlots.length === 0) return [
-        { label: '09:00 AM - 10:00 AM', start: '09:00', end: '10:00' }, 
+    if (filteredSlots.length === 0) return [
+        { label: '09:00  - 10:00 ', start: '09:00', end: '10:00' }, 
         { label: 'LUNCH', start: '13:00', end: '14:30', isLunch: true }
     ];
 
     const boundaries = new Set<string>();
-    allSlots.forEach(s => {
+    filteredSlots.forEach(s => {
         boundaries.add(s.start_time);
         boundaries.add(s.end_time);
     });
     
-    // Hardcoded Boundaries for Lunch and Break
     boundaries.add('10:50');
     boundaries.add('11:00');
     boundaries.add('13:00');
     boundaries.add('14:30');
 
     const sortedTimes = Array.from(boundaries).sort();
-    const filteredTimes = sortedTimes.filter(t => {
-        // Prevent creating small slots inside lunch or break if data is messy
+    const cleanTimes = sortedTimes.filter(t => {
         if (t > '13:00' && t < '14:30') return false; 
         if (t > '10:50' && t < '11:00') return false;
         return true;
     });
 
     let cols: TimeColumn[] = [];
-    for (let i = 0; i < filteredTimes.length - 1; i++) {
-        const start = filteredTimes[i];
-        const end = filteredTimes[i+1];
+    for (let i = 0; i < cleanTimes.length - 1; i++) {
+        const start = cleanTimes[i];
+        const end = cleanTimes[i+1];
         
-        // Identify Special Slots
         const isLunch = (start === '13:00' && end === '14:30');
         const isBreak = (start === '10:50' && end === '11:00');
-
         const cStart = parseInt(start.replace(':', ''));
         const cEnd = parseInt(end.replace(':', ''));
 
-        const hasClass = allSlots.some(s => {
+        const hasClass = filteredSlots.some(s => {
             const sStart = parseInt(s.start_time.replace(':', ''));
             const sEnd = parseInt(s.end_time.replace(':', ''));
             return (sStart < cEnd && sEnd > cStart);
@@ -154,22 +179,19 @@ export function MasterRoomViewer({ onBack }: MasterRoomViewerProps) {
         if (isLunch || isBreak || hasClass) {
             cols.push({
                 label: isLunch ? 'LUNCH' : isBreak ? 'BREAK' : `${convertTo12Hour(start)} - ${convertTo12Hour(end)}`,
-                start: start,
-                end: end,
-                // Reuse isLunch flag for gray/vertical styling
-                isLunch: isLunch || isBreak 
+                start: start, end: end, isLunch: isLunch || isBreak 
             });
         }
     }
     return cols;
-  }, [allSlots]);
+  }, [filteredSlots]); // Dependency changed to filteredSlots
 
-  // --- 3. Processing ---
+  // --- 4. Processing ---
   const processedSlots = useMemo(() => {
     const uniqueSlots: FetchedSlot[] = [];
     const seenMap = new Map<string, boolean>();
 
-    allSlots.forEach(slot => {
+    filteredSlots.forEach(slot => {
         const dedupKey = `${slot.day_of_week}-${slot.start_time}-${slot.room_name}-${slot.subject_code}`;
         if (!seenMap.has(dedupKey)) {
             seenMap.set(dedupKey, true);
@@ -177,7 +199,7 @@ export function MasterRoomViewer({ onBack }: MasterRoomViewerProps) {
         }
     });
     return uniqueSlots;
-  }, [allSlots]);
+  }, [filteredSlots]); // Dependency changed to filteredSlots
 
   // --- Render Slot ---
   const renderSlotItem = (slot: FetchedSlot) => {
@@ -214,7 +236,6 @@ export function MasterRoomViewer({ onBack }: MasterRoomViewerProps) {
 
     cellSlots.sort((a, b) => a.room_name.localeCompare(b.room_name, undefined, { numeric: true }));
 
-    // Rule: If > 5 items, use double columns
     const isCrowded = cellSlots.length > 5;
 
     return (
@@ -229,6 +250,9 @@ export function MasterRoomViewer({ onBack }: MasterRoomViewerProps) {
   // --- PDF Export ---
   const handleDownloadPDF = async () => {
     if (!pdfRef.current) return;
+    const originalCursor = document.body.style.cursor;
+    document.body.style.cursor = 'wait';
+
     try {
       const element = pdfRef.current;
       const width = element.scrollWidth;
@@ -236,7 +260,7 @@ export function MasterRoomViewer({ onBack }: MasterRoomViewerProps) {
 
       const imgData = await toPng(element, { 
         cacheBust: true, backgroundColor: '#ffffff', width, height,
-        style: { overflow: 'visible', maxHeight: 'none', maxWidth: 'none' }
+        style: { overflow: 'visible', maxHeight: 'none', maxWidth: 'none', position: 'static' }
       });
 
       const pxToMm = 0.264583;
@@ -249,10 +273,12 @@ export function MasterRoomViewer({ onBack }: MasterRoomViewerProps) {
       });
 
       pdf.addImage(imgData, 'PNG', 5, 5, pdfWidth, pdfHeight);
-      pdf.save(`All-Rooms-Master-View.pdf`);
+      pdf.save(`Master-View-${selectedBuilding}.pdf`);
     } catch (err) {
       console.error('PDF Error:', err);
       alert('PDF generation failed.');
+    } finally {
+        document.body.style.cursor = originalCursor;
     }
   };
 
@@ -268,15 +294,34 @@ export function MasterRoomViewer({ onBack }: MasterRoomViewerProps) {
             <div>
                 <h1 className="text-xl font-bold text-gray-800">Campus Occupancy View</h1>
                 <div className="text-xs text-gray-500">
-                    Master Room Schedule • Showing all active rooms
+                    Master Room Schedule • {selectedBuilding === 'All' ? 'All Buildings' : selectedBuilding}
                 </div>
             </div>
         </div>
         <div className="flex flex-wrap gap-2 items-center">
+            
+            {/* BUILDING FILTER DROPDOWN */}
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-300 rounded hover:border-indigo-400 transition-colors">
+                <Building2 className="w-3.5 h-3.5 text-gray-500"/>
+                <select 
+                    value={selectedBuilding}
+                    onChange={(e) => setSelectedBuilding(e.target.value)}
+                    className="text-xs font-semibold text-gray-700 bg-transparent outline-none cursor-pointer"
+                >
+                    <option value="All">All Buildings</option>
+                    {availableBuildings.map(b => (
+                        <option key={b} value={b}>{b}</option>
+                    ))}
+                </select>
+            </div>
+
+            <div className="h-6 w-px bg-gray-300 mx-1 hidden md:block"></div>
+
             <div className="px-3 py-1.5 bg-indigo-50 text-indigo-700 text-xs font-semibold rounded border border-indigo-100 flex items-center gap-2">
                 <MapPin className="w-3 h-3" />
-                All Rooms
+                Live Occupancy
             </div>
+            
             <button onClick={handleDownloadPDF} className="flex items-center gap-2 px-3 py-2 bg-gray-900 text-white text-sm rounded hover:bg-black transition shadow-sm">
                <Download className="w-3.5 h-3.5" /> PDF
             </button>
@@ -292,7 +337,6 @@ export function MasterRoomViewer({ onBack }: MasterRoomViewerProps) {
                 <th className="border border-black w-24 shadow-sm">Day</th>
                 {dynamicTimeColumns.map((col, idx) => (
                     <th key={idx} className={`border border-black p-1 ${col.isLunch ? 'w-8 bg-gray-200' : 'min-w-[140px]'}`}>
-                    {/* 👇 Use dynamic label so LUNCH and BREAK display correctly */}
                     {col.isLunch ? <span className="writing-mode-vertical text-[9px] tracking-widest text-gray-600">{col.label}</span> : col.label}
                     </th>
                 ))}
@@ -305,7 +349,6 @@ export function MasterRoomViewer({ onBack }: MasterRoomViewerProps) {
                         {day}
                     </td>
                     {dynamicTimeColumns.map((col, cIdx) => {
-                        // 👇 Display 'LUNCH' or 'BREAK' vertically
                         if (col.isLunch) return <td key={cIdx} className="border border-black bg-gray-100 font-bold writing-mode-vertical text-[10px] tracking-widest text-gray-500 select-none">{col.label}</td>;
                         return (
                         <td key={cIdx} className="border border-black p-0 hover:bg-blue-50/10 transition-colors align-top h-100">

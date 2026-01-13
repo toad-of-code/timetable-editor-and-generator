@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import { Loader2, ArrowLeft, Download, Filter } from 'lucide-react';
+import { Loader2, ArrowLeft, Download, Filter, FileSpreadsheet } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import jsPDF from 'jspdf';
+import { useGoogleSheets } from '../hooks/useGoogleSheets'; // 👈 Import Hook
 
 // --- Interfaces ---
 
@@ -28,7 +29,7 @@ interface TimeColumn {
   label: string;
   start: string;
   end: string;
-  isLunch?: boolean; // Used for both Lunch and Break styling
+  isLunch?: boolean;
 }
 
 const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI'];
@@ -39,6 +40,9 @@ export function RoomTimetableViewer({ onBack }: RoomTimetableViewerProps) {
   const [selectedRoom, setSelectedRoom] = useState<string>('');
   const [availableRooms, setAvailableRooms] = useState<string[]>([]);
   const pdfRef = useRef<HTMLDivElement>(null);
+
+  // 👇 Initialize the Google Sheets Hook
+  const { exportToSheets, isExporting } = useGoogleSheets();
 
   // --- Helpers ---
   const extractVal = (data: any, key: string) => {
@@ -114,7 +118,7 @@ export function RoomTimetableViewer({ onBack }: RoomTimetableViewerProps) {
     return allSlots.filter(s => s.room_name === selectedRoom);
   }, [allSlots, selectedRoom]);
 
-  // --- 3. Dynamic Columns (With Break) ---
+  // --- 3. Dynamic Columns ---
   const dynamicTimeColumns = useMemo(() => {
     if (roomSlots.length === 0) return [
       { label: '09:00-10:00', start: '09:00', end: '10:00' },
@@ -127,7 +131,6 @@ export function RoomTimetableViewer({ onBack }: RoomTimetableViewerProps) {
       boundaries.add(s.end_time);
     });
 
-    // Hardcoded Boundaries
     boundaries.add('10:50');
     boundaries.add('11:00');
     boundaries.add('13:00');
@@ -136,7 +139,6 @@ export function RoomTimetableViewer({ onBack }: RoomTimetableViewerProps) {
     const sortedTimes = Array.from(boundaries).sort();
 
     const filteredTimes = sortedTimes.filter(t => {
-      // Avoid small slivers inside lunch/break
       if (t > '13:00' && t < '14:30') return false;
       if (t > '10:50' && t < '11:00') return false;
       return true;
@@ -164,7 +166,7 @@ export function RoomTimetableViewer({ onBack }: RoomTimetableViewerProps) {
           label: isLunch ? 'LUNCH' : isBreak ? 'BREAK' : `${convertTo12Hour(start)} - ${convertTo12Hour(end)}`,
           start: start,
           end: end,
-          isLunch: isLunch || isBreak // Reuse styling
+          isLunch: isLunch || isBreak
         });
       }
     }
@@ -198,13 +200,9 @@ export function RoomTimetableViewer({ onBack }: RoomTimetableViewerProps) {
 
     return (
       <div key={slot.id} className={`w-full flex flex-col justify-center items-center text-[9px] leading-tight ${textColor} bg-transparent p-1 border-b border-gray-100 last:border-0`}>
-
-        {/* Line 1: Subject Code & Type */}
         <div className="font-bold whitespace-nowrap">
           {slot.subject_code} ({slot.slot_type.charAt(0)})
         </div>
-
-        {/* Line 2: Professor Names */}
         {profNames.length > 0 && (
           <div className="flex flex-col items-center gap-0 my-0.5">
             {profNames.map((name, idx) => (
@@ -214,14 +212,11 @@ export function RoomTimetableViewer({ onBack }: RoomTimetableViewerProps) {
             ))}
           </div>
         )}
-
-        {/* Line 3: Group & Semester */}
         <div className="scale-90 opacity-90 whitespace-nowrap flex gap-1 items-center font-semibold text-indigo-800">
           <span>{slot.group_name}</span>
           <span className="text-gray-400">•</span>
           <span>Sem {slot.semester}</span>
         </div>
-
       </div>
     );
   };
@@ -246,21 +241,59 @@ export function RoomTimetableViewer({ onBack }: RoomTimetableViewerProps) {
     );
   };
 
+  // --- 5. Export to Sheets Logic ---
+  const handleGoogleSheetExport = () => {
+    // A. Header Row
+    const headerRow = ['Day', ...dynamicTimeColumns.map(c => c.label)];
+
+    // B. Body Rows
+    const bodyRows = DAYS.map((day, dayIndex) => {
+      const row = [day];
+
+      dynamicTimeColumns.forEach(col => {
+        if (col.isLunch) {
+           row.push(col.label); // "LUNCH" or "BREAK"
+        } else {
+           // Find matching slots for this cell
+           const colStart = parseInt(col.start.replace(':', ''));
+           const colEnd = parseInt(col.end.replace(':', ''));
+
+           const cellSlots = processedSlots.filter(s => {
+             if (s.day_of_week !== dayIndex + 1) return false;
+             const slotStart = parseInt(s.start_time.replace(':', ''));
+             const slotEnd = parseInt(s.end_time.replace(':', ''));
+             return (slotStart <= colStart && slotEnd >= colEnd);
+           });
+
+           if (cellSlots.length === 0) {
+             row.push('');
+           } else {
+             // Format: "Code (Type) - Group - Prof"
+             const cellText = cellSlots.map(s => 
+               `${s.subject_code} (${s.slot_type.charAt(0)}) - ${s.group_name} - ${s.professor_name} - Sem ${s.semester}`
+             ).join('\n'); 
+             row.push(cellText);
+           }
+        }
+      });
+      return row;
+    });
+
+    const allData = [headerRow, ...bodyRows];
+    exportToSheets(`Room-Schedule-${selectedRoom}`, allData);
+  };
+
   // --- PDF Export ---
   const handleDownloadPDF = async () => {
     if (!pdfRef.current) return;
-
     try {
       const element = pdfRef.current;
       const width = element.scrollWidth;
       const height = element.scrollHeight;
 
       const imgData = await toPng(element, {
-        cacheBust: true,
-        backgroundColor: '#ffffff',
-        width: width,
-        height: height,
-        style: { overflow: 'visible' }
+        cacheBust: true, backgroundColor: '#ffffff', width: width, height: height,
+        style: { overflow: 'visible', maxHeight: 'none', maxWidth: 'none', position: 'static' }
       });
 
       const pxToMm = 0.264583;
@@ -269,17 +302,12 @@ export function RoomTimetableViewer({ onBack }: RoomTimetableViewerProps) {
 
       const pdf = new jsPDF({
         orientation: pdfWidth > pdfHeight ? 'l' : 'p',
-        unit: 'mm',
-        format: [pdfWidth + 10, pdfHeight + 10]
+        unit: 'mm', format: [pdfWidth + 10, pdfHeight + 10]
       });
 
       pdf.addImage(imgData, 'PNG', 5, 5, pdfWidth, pdfHeight);
       pdf.save(`Room-${selectedRoom}.pdf`);
-
-    } catch (err) {
-      console.error('PDF Export failed:', err);
-      alert('Could not generate PDF. Please check console.');
-    }
+    } catch (err) { alert('PDF Error'); }
   };
 
   if (loading) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin w-8 h-8 text-indigo-600" /></div>;
@@ -309,6 +337,17 @@ export function RoomTimetableViewer({ onBack }: RoomTimetableViewerProps) {
               {availableRooms.map(r => <option key={r} value={r}>{r}</option>)}
             </select>
           </div>
+          
+          {/* 👇 GOOGLE SHEETS BUTTON */}
+          <button 
+                onClick={handleGoogleSheetExport} 
+                disabled={isExporting}
+                className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700 transition shadow-sm disabled:opacity-50"
+            >
+               {isExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <FileSpreadsheet className="w-3.5 h-3.5" />}
+               {isExporting ? 'Creating...' : 'Sheets'}
+          </button>
+
           <button onClick={handleDownloadPDF} className="flex items-center gap-2 px-3 py-2 bg-gray-900 text-white text-sm rounded hover:bg-black transition shadow-sm">
             <Download className="w-3.5 h-3.5" /> PDF
           </button>
@@ -319,14 +358,12 @@ export function RoomTimetableViewer({ onBack }: RoomTimetableViewerProps) {
       <div className="flex-1 overflow-auto bg-white p-2">
 
         <div ref={pdfRef} className="min-w-max">
-          {/* Removed table-fixed for fluid layout */}
           <table className="w-full border-collapse border border-black text-center text-xs">
             <thead>
-              <tr className="bg-[#e6b8af] h-10 sticky top-0 z-10 shadow-sm">
+              <tr className="bg-[#e6b8af] h-10  top-0 z-10 shadow-sm">
                 <th className="border border-black w-14 bg-[#e6b8af]">Day</th>
                 {dynamicTimeColumns.map((col, idx) => (
                   <th key={idx} className={`border border-black p-1 ${col.isLunch ? 'w-8 bg-gray-200' : 'bg-[#e6b8af] min-w-[120px]'}`}>
-                    {/* Dynamic Label for LUNCH / BREAK */}
                     {col.isLunch ? <span className="writing-mode-vertical text-[9px] tracking-widest text-gray-600">{col.label}</span> : col.label}
                   </th>
                 ))}
@@ -339,7 +376,6 @@ export function RoomTimetableViewer({ onBack }: RoomTimetableViewerProps) {
                     {day}
                   </td>
                   {dynamicTimeColumns.map((col, cIdx) => {
-                    // Dynamic Label for Cell
                     if (col.isLunch) return <td key={cIdx} className="border border-black bg-gray-100 font-bold writing-mode-vertical text-[10px] tracking-widest text-gray-500 select-none">{col.label}</td>;
                     return (
                       <td key={cIdx} className="border border-black p-0 hover:bg-blue-50/10 transition-colors align-top h-40">

@@ -8,6 +8,7 @@ import { RoomTimetableViewer } from './components/RoomTimetableViewer';
 import { MasterRoomViewer } from './components/MasterRoomViewer';
 import { FreeRoomViewer } from './components/FreeRoomViewer';
 import { StudentCustomTimetable } from './components/StudentCustomTimetable'; // 👈 1. Import New Component
+import { Toaster } from 'react-hot-toast';
 
 import { 
   FileSpreadsheet, 
@@ -85,7 +86,10 @@ function AppContent() {
         {view === 'master-room' && <MasterRoomViewer />}
         {view === 'free-room' && <FreeRoomViewer />}
       </main>
+      <Toaster position="bottom-center" toastOptions={{ duration: 4000 }} />
+    
     </div>
+    
   );
 }
 
