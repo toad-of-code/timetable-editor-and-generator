@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { Loader2, ArrowLeft, Download, Filter } from 'lucide-react';
 import { toPng } from 'html-to-image';
@@ -60,30 +60,6 @@ export const TimetableViewer: React.FC<ViewerProps> = ({ timetableId, onBack }) 
     hour = hour % 12 || 12; // Convert 0 to 12
     return `${hour}:${minute}`;
   };
-  // --- Helper: Get Professor Initials ---
-  // --- Helper: Get Professor Initials (Smart Version) ---
-  const getInitials = (name: string) => {
-    if (!name || name === 'Unknown') return '';
-
-    // 1. Split by "&" or "," to handle multiple professors
-    const profs = name.split(/ [&,] /);
-
-    return profs.map(prof => {
-      // A. Clean titles (Global replace to catch internal titles too)
-      const clean = prof.replace(/(Prof\.|Dr\.|Mr\.|Mrs\.|Ms\.)\s*/gi, '').trim();
-
-      // B. Remove dots
-      const normalized = clean.replace(/\./g, ' ');
-
-      // C. Get Initials
-      const parts = normalized.split(/\s+/).filter(p => p.length > 0);
-      if (parts.length === 0) return '';
-      return parts.map(p => p[0]).join('').toUpperCase();
-    }).join(' & '); // Join back with &
-  };
-
-
-
   // 1. Fetch Timetables
   useEffect(() => {
     const fetchTTs = async () => {

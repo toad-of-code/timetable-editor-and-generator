@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import  { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { Download, ArrowLeft, Loader2, CheckCircle2, Building2, FileSpreadsheet } from 'lucide-react';
+import { Download, ArrowLeft, Loader2, Building2, FileSpreadsheet } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import jsPDF from 'jspdf';
 import { useGoogleSheets } from '../hooks/useGoogleSheets'; // 👈 Import the hook
@@ -39,7 +39,7 @@ export function FreeRoomViewer({ onBack }: FreeRoomViewerProps) {
   const pdfRef = useRef<HTMLDivElement>(null);
 
   // 👇 Initialize the Hook
-  const { exportToSheets, isExporting } = useGoogleSheets();
+  const { exportToWorkbook: exportToSheets, isExporting } = useGoogleSheets();
 
   // --- Helper: Extract Building Name ---
   const getBuildingName = (roomName: string) => {
@@ -147,7 +147,12 @@ export function FreeRoomViewer({ onBack }: FreeRoomViewerProps) {
         return row;
     });
     const allData = [headerRow, ...bodyRows];
-    exportToSheets(`Free Rooms - ${selectedBuilding}`, allData);
+    exportToSheets(`Free Rooms - ${selectedBuilding}`, [
+  { 
+    title: selectedBuilding || "Free Rooms", 
+    rows: allData 
+  }
+]);
   };
 
   const handleDownloadPDF = async () => {

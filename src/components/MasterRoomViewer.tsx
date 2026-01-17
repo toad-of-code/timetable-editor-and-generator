@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { Download, ArrowLeft, Loader2, MapPin, Building2 } from 'lucide-react';
 import { toPng } from 'html-to-image';

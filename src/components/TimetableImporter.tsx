@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -6,9 +6,9 @@ import { Upload, Database, Loader2, FileSpreadsheet, Bug, CheckCircle, AlertTria
 
 // --- Constants & Types ---
 
-const TYPE_MAP: Record<string, 'Lecture' | 'Tutorial' | 'Practical'> = { 
-  'L': 'Lecture', 'T': 'Tutorial', 'P': 'Practical' 
-};
+// const TYPE_MAP: Record<string, 'Lecture' | 'Tutorial' | 'Practical'> = { 
+//   'L': 'Lecture', 'T': 'Tutorial', 'P': 'Practical' 
+// };
 
 // 1. EXACT IGNORE (Garbage)
 const IGNORE_EXACT = [
@@ -534,7 +534,7 @@ const TimetableImporter: React.FC<Props> = ({ onNavigate }) => {
       addLog('🚀 Mapping slots...');
       let dropCount = 0;
 
-      const slotsToInsert = parsedSlots.map((slot, i) => {
+      const slotsToInsert = parsedSlots.map((slot) => {
         const subId = findId(dbSubjects || [], 'code', slot.subjectCode);
         const profId = findId(dbProfs || [], 'name', slot.facultyName) || unknownProfId;
         const roomId = findId(dbRooms || [], 'name', slot.room);
