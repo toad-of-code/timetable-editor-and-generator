@@ -137,37 +137,44 @@ def generate_chunked_sessions(request: GenerateRequest) -> tuple[list[Session], 
             # Rule: If L >= 2, create one 2-hr block + remaining 1-hr blocks.
             # Example: L=3 → [2hr, 1hr]; L=2 → [2hr]; L=1 → [1hr]
             remaining_lectures = lectures
+            instance_idx = 0
             if remaining_lectures >= 2:
                 sessions.append(_make_session(
                     subject, group_id, group_name, professor_id,
                     home_room_id, "Lecture", LECTURE_2HR_BUCKETS,
-                    semester_number, is_elective, elective_group,
+                    semester_number, is_elective, elective_group, instance_idx
                 ))
                 remaining_lectures -= 2
+                instance_idx += 1
             for _ in range(remaining_lectures):
                 sessions.append(_make_session(
                     subject, group_id, group_name, professor_id,
                     home_room_id, "Lecture", LECTURE_1HR_BUCKETS,
-                    semester_number, is_elective, elective_group,
+                    semester_number, is_elective, elective_group, instance_idx
                 ))
+                instance_idx += 1
 
             # ── Chunk Tutorials ──────────────────────────────────────────
+            instance_idx = 0
             for _ in range(tutorials):
                 sessions.append(_make_session(
                     subject, group_id, group_name, professor_id,
                     home_room_id, "Tutorial", LECTURE_1HR_BUCKETS,
-                    semester_number, is_elective, elective_group,
+                    semester_number, is_elective, elective_group, instance_idx
                 ))
+                instance_idx += 1
 
             # ── Chunk Practicals ─────────────────────────────────────────
             # Labs are always 2hr contiguous. practical count = number of lab sessions.
+            instance_idx = 0
             for _ in range(practicals):
                 sessions.append(_make_session(
                     subject, group_id, group_name, professor_id,
                     None,          # Labs never use home room — solver picks Lab room
                     "Practical", LAB_BUCKETS,
-                    semester_number, is_elective, elective_group,
+                    semester_number, is_elective, elective_group, instance_idx
                 ))
+                instance_idx += 1
 
     context = {
         "cluster": cluster,
@@ -192,6 +199,7 @@ def _make_session(
     semester_number: int,
     is_elective: bool,
     elective_group: Optional[str],
+    instance_idx: Optional[int],
 ) -> Session:
     return Session(
         session_id=str(uuid.uuid4()),
@@ -207,4 +215,5 @@ def _make_session(
         semester_number=semester_number,
         is_elective=is_elective,
         elective_group=elective_group,
+        elective_instance_idx=instance_idx,
     )

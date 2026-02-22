@@ -44,6 +44,7 @@ class Session:
         semester_number: int,
         is_elective: bool = False,
         elective_group: Optional[str] = None,
+        elective_instance_idx: Optional[int] = None,
     ):
         self.session_id = session_id
         self.subject_id = subject_id
@@ -58,6 +59,7 @@ class Session:
         self.semester_number = semester_number
         self.is_elective = is_elective
         self.elective_group = elective_group
+        self.elective_instance_idx = elective_instance_idx
 
     def __repr__(self) -> str:
         return (
