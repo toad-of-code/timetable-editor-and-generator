@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ClipboardList, ChevronDown, ChevronUp, Loader2, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -11,6 +11,7 @@ interface CourseResult {
     code: string;
     type: 'Core' | 'Elective' | 'Minor' | 'ProtoMakers' | 'Project';
     credit: string;
+    electiveGroup?: string;   // e.g. 'HSMC', 'Basket 1', 'Basket 2'
     isBasket?: boolean;
     highlight?: boolean;
 }
@@ -74,6 +75,7 @@ async function fetchSemesterSubjects(): Promise<SemesterData[]> {
                 code,
                 name,
                 subject_type,
+                elective_group,
                 lectures,
                 tutorials,
                 practicals,
@@ -115,6 +117,7 @@ async function fetchSemesterSubjects(): Promise<SemesterData[]> {
                 code: sub.code ?? '—',
                 type: mapType(sub.subject_type),
                 credit: formatCredit(sub.lectures, sub.tutorials, sub.practicals, sub.credits),
+                electiveGroup: sub.elective_group ?? undefined,
                 isBasket: isElective,
                 highlight: isElective,
             });
@@ -130,10 +133,33 @@ async function fetchSemesterSubjects(): Promise<SemesterData[]> {
         // Re-number after sort
         courses.forEach((c, i) => { (c as any)._idx = i + 1; });
 
-        const totalCredits = courses.reduce((sum, c) => {
-            const parts = c.credit.split('=');
-            return sum + (parseInt(parts[1] ?? '0') || 0);
-        }, 0);
+        // For Electives: a student picks ONE per group (HSMC, Basket 1, Basket 2, etc.)
+        // Count the max-credit elective from each distinct group
+        const coreCredits = courses
+            .filter(c => c.type !== 'Elective')
+            .reduce((sum, c) => {
+                const parts = c.credit.split('=');
+                return sum + (parseInt(parts[1] ?? parts[0] ?? '0') || 0);
+            }, 0);
+
+        const electiveCredits = (() => {
+            const electives = courses.filter(c => c.type === 'Elective');
+            if (electives.length === 0) return 0;
+            // group by electiveGroup (fallback: 'Elective' if no group stored)
+            const groups = new Map<string, number[]>();
+            electives.forEach(c => {
+                const g = c.electiveGroup ?? 'Elective';
+                const val = parseInt(c.credit.split('=')[1] ?? c.credit.split('=')[0] ?? '0') || 0;
+                if (!groups.has(g)) groups.set(g, []);
+                groups.get(g)!.push(val);
+            });
+            // Sum the max credit from each group
+            let total = 0;
+            groups.forEach(vals => { total += Math.max(...vals); });
+            return total;
+        })();
+
+        const totalCredits = coreCredits + electiveCredits;
 
         semMap.set(sem, {
             semesterNum: sem,
@@ -241,11 +267,62 @@ function SemesterBlock({ data, defaultOpen }: { data: SemesterData; defaultOpen:
                                         No subjects found for this semester
                                     </td>
                                 </tr>
-                            ) : (
-                                data.courses.map((c, i) => (
-                                    <CourseRow key={c.id} course={c} idx={i + 1} />
-                                ))
-                            )}
+                            ) : (() => {
+                                const core = data.courses.filter(c => c.type !== 'Elective' && c.type !== 'Minor');
+                                const minors = data.courses.filter(c => c.type === 'Minor');
+                                const electives = data.courses.filter(c => c.type === 'Elective');
+                                let counter = 0;
+                                return (
+                                    <>
+                                        {/* ── Core subjects ── */}
+                                        {core.map(c => (
+                                            <CourseRow key={c.id} course={c} idx={++counter} />
+                                        ))}
+
+                                        {/* ── Minor (MDM) section ── */}
+                                        {minors.length > 0 && (
+                                            <>
+                                                <tr>
+                                                    <td colSpan={5} className="px-3 py-1.5 bg-gradient-to-r from-orange-500 to-amber-400 text-white">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-bold text-xs tracking-wider uppercase">Minor (MDM)</span>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                                {minors.map(c => (
+                                                    <CourseRow key={c.id} course={c} idx={++counter} />
+                                                ))}
+                                            </>
+                                        )}
+
+                                        {/* ── Per-group Elective sections ── */}
+                                        {electives.length > 0 && (() => {
+                                            // Build ordered group → courses map (preserving first-seen order)
+                                            const groupMap = new Map<string, CourseResult[]>();
+                                            electives.forEach(c => {
+                                                const g = c.electiveGroup ?? 'Electives';
+                                                if (!groupMap.has(g)) groupMap.set(g, []);
+                                                groupMap.get(g)!.push(c);
+                                            });
+                                            return Array.from(groupMap.entries()).map(([groupName, courses]) => (
+                                                <React.Fragment key={groupName}>
+                                                    <tr>
+                                                        <td colSpan={5} className="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-violet-500 text-white">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="font-bold text-xs tracking-wider uppercase">{groupName}</span>
+                                                                <span className="text-white/70 text-[10px] font-normal">(student picks one)</span>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                    {courses.map(c => (
+                                                        <CourseRow key={c.id} course={c} idx={++counter} />
+                                                    ))}
+                                                </React.Fragment>
+                                            ));
+                                        })()}
+                                    </>
+                                );
+                            })()}
                         </tbody>
                     </table>
 

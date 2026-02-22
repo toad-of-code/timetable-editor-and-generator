@@ -31,6 +31,8 @@ interface ParsedSlot {
   facultyName: string;
   rawString: string;
   isMinor?: boolean;
+  isElective?: boolean;
+  electiveGroup?: string;  // 'HSMC' | 'Basket 1' | 'Basket 2' | 'Open Elective' | etc.
 }
 
 interface DebugRow {
@@ -145,6 +147,7 @@ const parseSlotHeuristically = (rawText: string) => {
 // ------------------------------------------------------------------
 const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI'];
 const TYPES = ['Lecture', 'Tutorial', 'Practical'] as const;
+const SUBJECT_TYPES = ['Core', 'Elective', 'Minor'] as const;
 
 interface EditableRowProps {
   slot: ParsedSlot;
@@ -157,7 +160,8 @@ const EditableRow: React.FC<EditableRowProps> = ({ slot, onChange, onDelete }) =
   const inp = 'w-full text-xs border border-transparent rounded px-1 py-0.5 focus:border-indigo-300 focus:bg-indigo-50 focus:outline-none transition';
 
   return (
-    <tr className="hover:bg-gray-50 group">
+    <tr className={`hover:bg-gray-50 group ${slot.isMinor ? 'bg-orange-50/40' : slot.isElective ? 'bg-purple-50/40' : ''
+      }`}>
       <td className={td}>
         <select
           value={slot.day}
@@ -197,6 +201,17 @@ const EditableRow: React.FC<EditableRowProps> = ({ slot, onChange, onDelete }) =
           className={inp}
         >
           {TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
+      </td>
+      <td className={td}>
+        <select
+          value={slot.isMinor ? 'Minor' : slot.isElective ? 'Elective' : 'Core'}
+          onChange={e => onChange(slot.id, 'subjectTypeGroup' as any, e.target.value)}
+          className={`${inp} ${slot.isMinor ? 'text-orange-700 font-semibold'
+            : slot.isElective ? 'text-purple-700 font-semibold' : ''
+            }`}
+        >
+          {SUBJECT_TYPES.map(st => <option key={st} value={st}>{st}</option>)}
         </select>
       </td>
       <td className={td}>
@@ -442,6 +457,32 @@ const TimetableImporter: React.FC<Props> = ({ onNavigate }) => {
         if (IGNORE_EXACT.some(w => cellText.toUpperCase() === w)) continue;
 
         if (cellText.length > 2) {
+          // Detect category keywords BEFORE stripping — determines subject_type in DB
+          // Use only the first line (the header) for Basket 1/2 detection to avoid
+          // matching room numbers like "CC3-1001" on subsequent lines.
+          const cellHeader = cellText.split(/\r?\n/)[0];
+          const isHsmcCell = /\bHSMC\b/i.test(cellText);
+          const isMdmCell = /\bMDM\b/i.test(cellText);
+          const hasBasket = /\bBASKET\b/i.test(cellHeader);
+          const isBasket1Cell = hasBasket && /\b1\b/.test(cellHeader);
+          const isBasket2Cell = hasBasket && /\b2\b/.test(cellHeader);
+          const isBasketCell = hasBasket;
+          const isOpenElectiveCell = /\bOPEN\s*ELECTIVE\b/i.test(cellText);
+          const isProgramElectiveCell = /\bPROGRAM\s*ELECTIVE\b/i.test(cellText);
+          const isElectiveCell = isHsmcCell || isBasketCell || isOpenElectiveCell || isProgramElectiveCell;
+          const isMinorCell = isMdmCell;
+
+          // Derive group label (used as elective_group in DB)
+          const electiveGroupLabel: string | undefined =
+            isHsmcCell ? 'HSMC'
+              : isBasket1Cell ? 'Basket 1'
+                : isBasket2Cell ? 'Basket 2'
+                  : isBasketCell ? 'Basket'           // fallback if no number found
+                    : isOpenElectiveCell ? 'Open Elective'
+                      : isProgramElectiveCell ? 'Program Elective'
+                        : isMdmCell ? 'MDM'
+                          : undefined;
+
           cellText = cellText.replace(/(\))(\s+)([A-Z][A-Za-z0-9]{1,})/g, '$1\n$3');
           const lines = cellText.split(/\r?\n/).filter(l => l.trim().length > 0);
 
@@ -484,7 +525,9 @@ const TimetableImporter: React.FC<Props> = ({ onNavigate }) => {
                 room,
                 facultyName: specificProf,
                 rawString: cleanLine,
-                isMinor: subjectNameMap[subject]?.toLowerCase().includes('minor')
+                isMinor: isMinorCell,
+                isElective: isElectiveCell,
+                electiveGroup: electiveGroupLabel,
               });
 
               debugRows.push({ rowNum: r + 1, rawText: cleanLine, status: 'Parsed' });
@@ -524,7 +567,16 @@ const TimetableImporter: React.FC<Props> = ({ onNavigate }) => {
   // ---- SLOT EDITING ----
   const handleSlotChange = (id: string, field: keyof ParsedSlot, value: string) => {
     setParsedSlots(prev =>
-      prev.map(s => s.id === id ? { ...s, [field]: value } : s)
+      prev.map(s => {
+        if (s.id !== id) return s;
+        // subjectTypeGroup sets both boolean flags together
+        if (field === 'subjectTypeGroup' as any) {
+          return { ...s, isElective: value === 'Elective', isMinor: value === 'Minor' };
+        }
+        // isElective is a boolean; the select sends 'true'/'false' strings
+        if (field === 'isElective') return { ...s, isElective: value === 'true' };
+        return { ...s, [field]: value };
+      })
     );
   };
 
@@ -592,7 +644,11 @@ const TimetableImporter: React.FC<Props> = ({ onNavigate }) => {
               lectures: ltps?.L ?? null,
               tutorials: ltps?.T ?? null,
               practicals: ltps?.P ?? null,
-              subject_type: 'Core'
+              subject_type: parsedSlots.some(s => s.subjectCode === c && s.isMinor) ? 'Minor'
+                : parsedSlots.some(s => s.subjectCode === c && s.isElective) ? 'Elective'
+                  : 'Core',
+              // NEW: persist the elective sub-group (requires elective_group column in subjects table)
+              elective_group: parsedSlots.find(s => s.subjectCode === c && s.electiveGroup)?.electiveGroup ?? null,
             };
           }),
           { onConflict: 'code' }
@@ -970,6 +1026,7 @@ const TimetableImporter: React.FC<Props> = ({ onNavigate }) => {
                   <th className="px-2 py-2 w-20">End</th>
                   <th className="px-2 py-2 w-32">Subject Code</th>
                   <th className="px-2 py-2 w-24">Type</th>
+                  <th className="px-2 py-2 w-24">Subject Type</th>
                   <th className="px-2 py-2 w-24">Section</th>
                   <th className="px-2 py-2 w-28">Room</th>
                   <th className="px-2 py-2">Faculty</th>
@@ -981,7 +1038,7 @@ const TimetableImporter: React.FC<Props> = ({ onNavigate }) => {
               <tbody className="divide-y divide-gray-100">
                 {filteredSlots.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="text-center py-8 text-gray-400 italic">
+                    <td colSpan={10} className="text-center py-8 text-gray-400 italic">
                       No slots match the current filters.
                     </td>
                   </tr>
