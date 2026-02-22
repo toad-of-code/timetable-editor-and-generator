@@ -23,6 +23,11 @@ dist-ssr
 *.sln
 *.sw?
 .env
+.env.*
+!.env.example
 #Excel files
 *.xlsx
-client*
+*.csv
+Thumbs.db
+client_secret_*.json
+*.txt
