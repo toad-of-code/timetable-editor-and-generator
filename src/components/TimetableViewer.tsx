@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import { Loader2, ArrowLeft, Download, Filter } from 'lucide-react';
+import { Loader2, ArrowLeft, Download, Filter, AlertTriangle, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import jsPDF from 'jspdf';
 
@@ -200,6 +200,82 @@ export const TimetableViewer: React.FC<ViewerProps> = ({ timetableId, onBack }) 
     return uniqueSlots;
   }, [allSlots]);
 
+  // --- Clash Detection ---
+  const [showClashDetails, setShowClashDetails] = useState(false);
+
+  interface Clash {
+    type: 'Room' | 'Professor' | 'Section';
+    entity: string;
+    day: string;
+    time: string;
+    slots: { code: string; group: string }[];
+  }
+
+  const clashes = useMemo(() => {
+    if (allSlots.length === 0) return [];
+
+    const timeOverlaps = (s1: FetchedSlot, s2: FetchedSlot) => {
+      return s1.start_time < s2.end_time && s2.start_time < s1.end_time;
+    };
+
+    const dayNames = ['', 'MON', 'TUE', 'WED', 'THU', 'FRI'];
+    const found: Clash[] = [];
+
+    // Check all pairs for same-day overlaps
+    for (let i = 0; i < allSlots.length; i++) {
+      for (let j = i + 1; j < allSlots.length; j++) {
+        const a = allSlots[i], b = allSlots[j];
+        if (a.day_of_week !== b.day_of_week) continue;
+        if (!timeOverlaps(a, b)) continue;
+
+        const day = dayNames[a.day_of_week] || `Day${a.day_of_week}`;
+        const time = `${a.start_time.slice(0, 5)}`;
+
+        // Room clash
+        if (a.room_name === b.room_name && a.room_name !== 'N/A') {
+          found.push({
+            type: 'Room', entity: a.room_name, day, time,
+            slots: [
+              { code: a.subject_code, group: a.group_name },
+              { code: b.subject_code, group: b.group_name },
+            ],
+          });
+        }
+
+        // Professor clash
+        if (a.professor_name === b.professor_name && a.professor_name !== 'N/A') {
+          found.push({
+            type: 'Professor', entity: a.professor_name, day, time,
+            slots: [
+              { code: a.subject_code, group: a.group_name },
+              { code: b.subject_code, group: b.group_name },
+            ],
+          });
+        }
+
+        // Section clash (same group, different subjects — skip WMC elective overlaps)
+        if (a.group_name === b.group_name && a.subject_code !== b.subject_code && a.group_name !== 'WMC') {
+          found.push({
+            type: 'Section', entity: a.group_name, day, time,
+            slots: [
+              { code: a.subject_code, group: a.group_name },
+              { code: b.subject_code, group: b.group_name },
+            ],
+          });
+        }
+      }
+    }
+
+    return found;
+  }, [allSlots]);
+
+  const clashSummary = useMemo(() => {
+    const room = clashes.filter(c => c.type === 'Room').length;
+    const professor = clashes.filter(c => c.type === 'Professor').length;
+    const section = clashes.filter(c => c.type === 'Section').length;
+    return { room, professor, section, total: room + professor + section };
+  }, [clashes]);
+
   // --- Render Slot (NO TOOLTIP, ALL INFO ON CARD) ---
   // --- Render Slot (With Initials) ---
   // --- Render Slot (Full Names on Separate Lines) ---
@@ -260,7 +336,7 @@ export const TimetableViewer: React.FC<ViewerProps> = ({ timetableId, onBack }) 
     if (selectedEntity !== 'All Sections') {
       cellSlots = cellSlots.filter(s =>
         s.group_name === selectedEntity ||
-        s.group_name === 'All' ||
+        s.group_name === 'WMC' ||
         s.group_name === 'all'
       );
     }
@@ -368,6 +444,53 @@ export const TimetableViewer: React.FC<ViewerProps> = ({ timetableId, onBack }) 
           </button>
         </div>
       </div>
+
+      {/* Clash Detection Banner */}
+      {allSlots.length > 0 && (
+        <div className={`mb-3 rounded-lg border shadow-sm ${clashSummary.total === 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+          <button
+            onClick={() => setShowClashDetails(prev => !prev)}
+            className="w-full px-4 py-2.5 flex items-center justify-between text-sm"
+          >
+            <div className="flex items-center gap-2">
+              {clashSummary.total === 0
+                ? <><CheckCircle2 className="w-4 h-4 text-green-600" /><span className="font-semibold text-green-800">No Clashes Detected ✅</span></>
+                : <><AlertTriangle className="w-4 h-4 text-red-600" /><span className="font-semibold text-red-800">{clashSummary.total} Clash{clashSummary.total > 1 ? 'es' : ''} Detected</span></>
+              }
+              {clashSummary.total > 0 && (
+                <div className="flex gap-2 ml-3 text-xs">
+                  {clashSummary.room > 0 && <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">Room: {clashSummary.room}</span>}
+                  {clashSummary.professor > 0 && <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-medium">Professor: {clashSummary.professor}</span>}
+                  {clashSummary.section > 0 && <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium">Section: {clashSummary.section}</span>}
+                </div>
+              )}
+            </div>
+            {clashSummary.total > 0 && (showClashDetails ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />)}
+          </button>
+
+          {showClashDetails && clashes.length > 0 && (
+            <div className="border-t border-red-200 px-4 py-3 max-h-60 overflow-y-auto">
+              <div className="space-y-1.5">
+                {clashes.map((clash, i) => (
+                  <div key={i} className="flex items-center gap-2 text-xs bg-white px-3 py-1.5 rounded border border-gray-100">
+                    <span className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${clash.type === 'Room' ? 'bg-red-100 text-red-700' :
+                      clash.type === 'Professor' ? 'bg-orange-100 text-orange-700' :
+                        'bg-purple-100 text-purple-700'
+                      }`}>{clash.type}</span>
+                    <span className="font-semibold text-gray-700">{clash.entity}</span>
+                    <span className="text-gray-400">•</span>
+                    <span className="text-gray-500">{clash.day} @ {clash.time}</span>
+                    <span className="text-gray-400">→</span>
+                    <span className="text-gray-700">
+                      {clash.slots.map(s => `${s.code} (${s.group})`).join(' vs ')}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="overflow-x-auto bg-white p-1 shadow-lg border border-gray-300 rounded-sm">
         <div ref={pdfRef} className="min-w-max">
