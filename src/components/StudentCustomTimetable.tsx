@@ -107,7 +107,7 @@ export function StudentCustomTimetable({ onBack }: CustomViewerProps) {
 
         const semSlots = cleanSlots.filter(s => s.semester === semNum);
         const groups = Array.from(new Set(semSlots.map(s => s.group_name)))
-          .filter(g => g !== 'All' && g !== 'Sec All')
+          .filter(g => g !== 'WMC' && g !== 'Sec WMC')
           .sort();
         setAvailableGroups(groups);
 
@@ -115,7 +115,7 @@ export function StudentCustomTimetable({ onBack }: CustomViewerProps) {
           setSelectedGroup(savedGroup);
           const relevantSlots = cleanSlots.filter(s =>
             s.semester === semNum &&
-            (s.group_name === savedGroup || s.group_name === 'All')
+            (s.group_name === savedGroup || s.group_name === 'WMC')
           );
           const uniqueSubjects = Array.from(new Set(relevantSlots.map(s => s.subject_code))).sort();
           setAvailableSubjects(uniqueSubjects);
@@ -139,7 +139,7 @@ export function StudentCustomTimetable({ onBack }: CustomViewerProps) {
     localStorage.setItem('my_custom_semester', sem.toString());
     const semSlots = allSlots.filter(s => s.semester === sem);
     const groups = Array.from(new Set(semSlots.map(s => s.group_name)))
-      .filter(g => g !== 'All' && g !== 'Sec All')
+      .filter(g => g !== 'WMC' && g !== 'Sec WMC')
       .sort();
     setAvailableGroups(groups);
     setSelectedGroup('');
@@ -152,7 +152,7 @@ export function StudentCustomTimetable({ onBack }: CustomViewerProps) {
     localStorage.setItem('my_custom_group', g);
     const relevantSlots = allSlots.filter(s =>
       s.semester === selectedSemester &&
-      (s.group_name === g || s.group_name === 'All')
+      (s.group_name === g || s.group_name === 'WMC')
     );
     const uniqueSubjects = Array.from(new Set(relevantSlots.map(s => s.subject_code))).sort();
     setAvailableSubjects(uniqueSubjects);
@@ -182,7 +182,7 @@ export function StudentCustomTimetable({ onBack }: CustomViewerProps) {
   const filteredSlots = useMemo(() => {
     return allSlots.filter(s =>
       s.semester === selectedSemester &&
-      (s.group_name === selectedGroup || s.group_name === 'All') &&
+      (s.group_name === selectedGroup || s.group_name === 'WMC') &&
       selectedSubjects.includes(s.subject_code)
     );
   }, [allSlots, selectedSemester, selectedGroup, selectedSubjects]);

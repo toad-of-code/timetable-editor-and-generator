@@ -31,3 +31,4 @@ dist-ssr
 Thumbs.db
 client_secret_*.json
 *.txt
+!requirements.txt

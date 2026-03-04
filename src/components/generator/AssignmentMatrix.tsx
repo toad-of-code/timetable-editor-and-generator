@@ -1,3 +1,4 @@
+import { Users, User2 } from 'lucide-react';
 import type { Subject, Group, Professor } from '../../hooks/useGeneratorData';
 
 interface Props {
@@ -6,8 +7,10 @@ interface Props {
     professors: Professor[];
     expertiseMap: Record<string, Professor[]>;
     assignments: Record<string, Record<string, string>>;
+    sectionModes: Record<string, 'all' | 'sections'>;
     onAssign: (subjectId: string, groupId: string, profId: string) => void;
     onApplyToAll: (subjectId: string, profId: string) => void;
+    onSectionModeChange: (subjectId: string, mode: 'all' | 'sections') => void;
 }
 
 export function AssignmentMatrix({
@@ -16,14 +19,30 @@ export function AssignmentMatrix({
     professors,
     expertiseMap,
     assignments,
+    sectionModes,
     onAssign,
     onApplyToAll,
+    onSectionModeChange,
 }: Props) {
-    const totalCells = subjects.length * groups.length;
-    const filledCells = Object.values(assignments).reduce(
-        (sum, groupMap) => sum + Object.values(groupMap).filter(Boolean).length,
-        0,
-    );
+    // Split groups
+    const allGroup = groups.find(g => g.name === 'WMC');
+    const sectionGroups = groups.filter(g => g.name !== 'WMC');
+
+    // Count filled cells (respecting modes)
+    let totalCells = 0;
+    let filledCells = 0;
+    // Smart default: electives → 'all', everything else → 'sections'
+    const getDefaultMode = (sub: { subject_type: string }): 'all' | 'sections' =>
+        sub.subject_type === 'Elective' ? 'all' : 'sections';
+
+    subjects.forEach(sub => {
+        const mode = sectionModes[sub.id] ?? getDefaultMode(sub);
+        const relevantGroups = mode === 'all' && allGroup ? [allGroup] : sectionGroups;
+        totalCells += relevantGroups.length;
+        relevantGroups.forEach(g => {
+            if (assignments[sub.id]?.[g.id]) filledCells++;
+        });
+    });
 
     return (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-5">
@@ -38,8 +57,8 @@ export function AssignmentMatrix({
                 {totalCells > 0 && (
                     <span
                         className={`text-xs px-3 py-1 rounded-full font-semibold ${filledCells === totalCells
-                                ? 'bg-green-100 text-green-700'
-                                : 'bg-yellow-100 text-yellow-700'
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-yellow-100 text-yellow-700'
                             }`}
                     >
                         {filledCells}/{totalCells} assigned
@@ -53,96 +72,107 @@ export function AssignmentMatrix({
                     No subjects found for this cluster.
                 </p>
             ) : (
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm border-collapse">
-                        <thead>
-                            <tr className="bg-slate-50 border-b border-gray-200">
-                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 min-w-[200px]">
-                                    Subject
-                                </th>
-                                {groups.map(g => (
-                                    <th
-                                        key={g.id}
-                                        className="px-3 py-3 text-center text-xs font-semibold text-gray-500 min-w-[150px]"
-                                    >
-                                        {g.name}
-                                    </th>
-                                ))}
-                                <th className="px-3 py-3 text-center text-xs font-semibold text-gray-500">
-                                    Apply All
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {subjects.map((subject, si) => {
-                                const rowBg = si % 2 === 0 ? 'bg-white' : 'bg-slate-50/50';
-                                // Only show professors with mapped expertise; fall back to all if none mapped
-                                const qualifiedProfs = expertiseMap[subject.id] ?? professors;
-                                const hasNoExpertise = !expertiseMap[subject.id];
+                <div className="divide-y divide-gray-100">
+                    {subjects.map((subject, si) => {
+                        const mode = sectionModes[subject.id] ?? getDefaultMode(subject);
+                        const qualifiedProfs = expertiseMap[subject.id] ?? professors;
+                        const hasNoExpertise = !expertiseMap[subject.id];
+                        const rowBg = si % 2 === 0 ? 'bg-white' : 'bg-slate-50/50';
 
-                                return (
-                                    <tr
-                                        key={subject.id}
-                                        className={`border-b border-gray-100 ${rowBg}`}
-                                    >
-                                        {/* Subject label */}
-                                        <td className="px-4 py-3">
-                                            <div className="font-medium text-gray-800 leading-tight">
-                                                {subject.name}
-                                            </div>
-                                            <div className="text-xs text-gray-400 font-mono mt-0.5">
-                                                {subject.code}
-                                            </div>
+                        // Which groups to show based on mode
+                        const activeGroups = mode === 'all' && allGroup ? [allGroup] : sectionGroups;
+
+                        return (
+                            <div key={subject.id} className={`p-4 ${rowBg}`}>
+                                {/* Row: Subject info + Mode toggle */}
+                                <div className="flex items-center justify-between mb-3">
+                                    <div className="flex-1">
+                                        <div className="font-medium text-gray-800 leading-tight">
+                                            {subject.name}
+                                        </div>
+                                        <div className="text-xs text-gray-400 font-mono mt-0.5">
+                                            {subject.code}
                                             <span
-                                                className={`mt-1 inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${subject.subject_type === 'Elective'
-                                                        ? 'bg-purple-100 text-purple-700'
-                                                        : 'bg-blue-100 text-blue-700'
+                                                className={`ml-2 inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${subject.subject_type === 'Elective'
+                                                    ? 'bg-purple-100 text-purple-700'
+                                                    : 'bg-blue-100 text-blue-700'
                                                     }`}
                                             >
                                                 {subject.subject_type}
                                             </span>
-                                        </td>
+                                        </div>
+                                    </div>
 
-                                        {/* Per-section professor dropdowns */}
-                                        {groups.map(group => {
-                                            const selectedProfId =
-                                                assignments[subject.id]?.[group.id] ?? '';
-                                            return (
-                                                <td key={group.id} className="px-3 py-3 text-center">
-                                                    <select
-                                                        className={`w-full px-2 py-1.5 border rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 ${selectedProfId
-                                                                ? 'border-green-400 bg-green-50'
-                                                                : 'border-gray-300'
-                                                            }`}
-                                                        value={selectedProfId}
-                                                        onChange={e =>
-                                                            onAssign(subject.id, group.id, e.target.value)
-                                                        }
-                                                    >
-                                                        <option value="">— Assign —</option>
-                                                        {qualifiedProfs.map(p => (
-                                                            <option key={p.id} value={p.id}>
-                                                                {p.name}
-                                                            </option>
-                                                        ))}
-                                                        {hasNoExpertise && (
-                                                            <optgroup label="⚠ No expertise mapped — showing all">
-                                                                {professors.map(p => (
-                                                                    <option key={p.id} value={p.id}>
-                                                                        {p.name}
-                                                                    </option>
-                                                                ))}
-                                                            </optgroup>
-                                                        )}
-                                                    </select>
-                                                </td>
-                                            );
-                                        })}
+                                    {/* Mode toggle */}
+                                    <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+                                        <button
+                                            onClick={() => onSectionModeChange(subject.id, 'all')}
+                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition ${mode === 'all'
+                                                ? 'bg-indigo-600 text-white shadow-sm'
+                                                : 'text-gray-500 hover:text-gray-700'
+                                                }`}
+                                        >
+                                            <Users className="w-3.5 h-3.5" />
+                                            All Together
+                                        </button>
+                                        <button
+                                            onClick={() => onSectionModeChange(subject.id, 'sections')}
+                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition ${mode === 'sections'
+                                                ? 'bg-indigo-600 text-white shadow-sm'
+                                                : 'text-gray-500 hover:text-gray-700'
+                                                }`}
+                                        >
+                                            <User2 className="w-3.5 h-3.5" />
+                                            Per Section
+                                        </button>
+                                    </div>
+                                </div>
 
-                                        {/* Apply-to-all shortcut */}
-                                        <td className="px-3 py-3 text-center">
+                                {/* Professor assignment dropdowns */}
+                                <div className="flex flex-wrap gap-3">
+                                    {activeGroups.map(group => {
+                                        const selectedProfId = assignments[subject.id]?.[group.id] ?? '';
+                                        return (
+                                            <div key={group.id} className="flex flex-col items-center gap-1">
+                                                <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
+                                                    {group.name}
+                                                </span>
+                                                <select
+                                                    className={`px-2 py-1.5 border rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 min-w-[160px] ${selectedProfId
+                                                        ? 'border-green-400 bg-green-50'
+                                                        : 'border-gray-300'
+                                                        }`}
+                                                    value={selectedProfId}
+                                                    onChange={e => onAssign(subject.id, group.id, e.target.value)}
+                                                >
+                                                    <option value="">— Assign —</option>
+                                                    {qualifiedProfs.map(p => (
+                                                        <option key={p.id} value={p.id}>
+                                                            {p.name}
+                                                        </option>
+                                                    ))}
+                                                    {hasNoExpertise && (
+                                                        <optgroup label="⚠ No expertise mapped — showing all">
+                                                            {professors.map(p => (
+                                                                <option key={p.id} value={p.id}>
+                                                                    {p.name}
+                                                                </option>
+                                                            ))}
+                                                        </optgroup>
+                                                    )}
+                                                </select>
+                                            </div>
+                                        );
+                                    })}
+
+                                    {/* Apply-to-all shortcut (only for per-section mode) */}
+                                    {mode === 'sections' && sectionGroups.length > 1 && (
+                                        <div className="flex flex-col items-center gap-1">
+                                            <span className="text-[10px] font-semibold text-indigo-400 uppercase tracking-wide">
+                                                Apply All
+                                            </span>
                                             <select
-                                                className="w-full px-2 py-1.5 border border-dashed border-indigo-300 rounded-md text-xs text-indigo-600 bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                                className="px-2 py-1.5 border border-dashed border-indigo-300 rounded-md text-xs text-indigo-600 bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 min-w-[160px]"
                                                 value=""
                                                 onChange={e => {
                                                     if (e.target.value)
@@ -156,12 +186,12 @@ export function AssignmentMatrix({
                                                     </option>
                                                 ))}
                                             </select>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })}
                 </div>
             )}
         </div>

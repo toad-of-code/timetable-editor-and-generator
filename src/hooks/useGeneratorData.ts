@@ -17,6 +17,10 @@ export interface Subject {
     name: string;
     credits: number;
     subject_type: string;
+    lectures: number;
+    tutorials: number;
+    practicals: number;
+    practical_duration: number;
 }
 
 export interface Group {
@@ -129,7 +133,7 @@ export function useGeneratorData(selectedClusterId: string): GeneratorData {
                 const [reqRes, groupRes, expertiseRes] = await Promise.all([
                     supabase
                         .from('cluster_requirements')
-                        .select('subject:subject_id (id, code, name, credits, subject_type)')
+                        .select('subject:subject_id (id, code, name, credits, subject_type, lectures, tutorials, practicals, practical_duration)')
                         .eq('cluster_id', selectedClusterId),
                     supabase
                         .from('student_groups')
@@ -145,8 +149,8 @@ export function useGeneratorData(selectedClusterId: string): GeneratorData {
                 if (groupRes.error) throw groupRes.error;
                 if (expertiseRes.error) throw expertiseRes.error;
 
-                // Type-safe extraction — no `as unknown as X` needed
-                const subjects = (reqRes.data as SubjectRow[])
+                // Type-safe extraction
+                const subjects = (reqRes.data as unknown as SubjectRow[])
                     .map(row => row.subject)
                     .filter((s): s is Subject => s !== null);
 
@@ -155,7 +159,7 @@ export function useGeneratorData(selectedClusterId: string): GeneratorData {
 
                 // Build expertise map: subjectId → Professor[]
                 const newMap: Record<string, Professor[]> = {};
-                for (const row of expertiseRes.data as ExpertiseRow[]) {
+                for (const row of expertiseRes.data as unknown as ExpertiseRow[]) {
                     if (!row.professor?.id) continue;
                     if (!newMap[row.subject_id]) newMap[row.subject_id] = [];
                     newMap[row.subject_id].push(row.professor);

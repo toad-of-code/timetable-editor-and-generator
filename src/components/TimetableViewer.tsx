@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import { Loader2, ArrowLeft, Download, Filter } from 'lucide-react';
+import { Loader2, ArrowLeft, Download, Filter, AlertTriangle, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import jsPDF from 'jspdf';
 
@@ -68,6 +68,8 @@ export const TimetableViewer: React.FC<ViewerProps> = ({ timetableId, onBack }) 
         setTimetables(data);
         if (!selectedTimetableId && data.length > 0) setSelectedTimetableId(data[0].id);
       }
+      // If no timetables exist, stop the loading spinner
+      if (!data || data.length === 0) setLoading(false);
     };
     fetchTTs();
   }, [selectedTimetableId]);
@@ -168,15 +170,15 @@ export const TimetableViewer: React.FC<ViewerProps> = ({ timetableId, onBack }) 
       });
 
       if (isLunch || isBreak || hasClass) {
-            cols.push({
-                // 3. SET LABEL
-                label: isLunch ? 'LUNCH' : isBreak ? 'BREAK' : `${convertTo12Hour(start)} - ${convertTo12Hour(end)}`,
-                start: start,
-                end: end,
-                // Reuse isLunch flag for styling (gray background) OR add a new one
-                isLunch: isLunch || isBreak 
-            });
-        }
+        cols.push({
+          // 3. SET LABEL
+          label: isLunch ? 'LUNCH' : isBreak ? 'BREAK' : `${convertTo12Hour(start)} - ${convertTo12Hour(end)}`,
+          start: start,
+          end: end,
+          // Reuse isLunch flag for styling (gray background) OR add a new one
+          isLunch: isLunch || isBreak
+        });
+      }
     }
 
     return cols;
@@ -198,49 +200,125 @@ export const TimetableViewer: React.FC<ViewerProps> = ({ timetableId, onBack }) 
     return uniqueSlots;
   }, [allSlots]);
 
+  // --- Clash Detection ---
+  const [showClashDetails, setShowClashDetails] = useState(false);
+
+  interface Clash {
+    type: 'Room' | 'Professor' | 'Section';
+    entity: string;
+    day: string;
+    time: string;
+    slots: { code: string; group: string }[];
+  }
+
+  const clashes = useMemo(() => {
+    if (allSlots.length === 0) return [];
+
+    const timeOverlaps = (s1: FetchedSlot, s2: FetchedSlot) => {
+      return s1.start_time < s2.end_time && s2.start_time < s1.end_time;
+    };
+
+    const dayNames = ['', 'MON', 'TUE', 'WED', 'THU', 'FRI'];
+    const found: Clash[] = [];
+
+    // Check all pairs for same-day overlaps
+    for (let i = 0; i < allSlots.length; i++) {
+      for (let j = i + 1; j < allSlots.length; j++) {
+        const a = allSlots[i], b = allSlots[j];
+        if (a.day_of_week !== b.day_of_week) continue;
+        if (!timeOverlaps(a, b)) continue;
+
+        const day = dayNames[a.day_of_week] || `Day${a.day_of_week}`;
+        const time = `${a.start_time.slice(0, 5)}`;
+
+        // Room clash
+        if (a.room_name === b.room_name && a.room_name !== 'N/A') {
+          found.push({
+            type: 'Room', entity: a.room_name, day, time,
+            slots: [
+              { code: a.subject_code, group: a.group_name },
+              { code: b.subject_code, group: b.group_name },
+            ],
+          });
+        }
+
+        // Professor clash
+        if (a.professor_name === b.professor_name && a.professor_name !== 'N/A') {
+          found.push({
+            type: 'Professor', entity: a.professor_name, day, time,
+            slots: [
+              { code: a.subject_code, group: a.group_name },
+              { code: b.subject_code, group: b.group_name },
+            ],
+          });
+        }
+
+        // Section clash (same group, different subjects — skip WMC elective overlaps)
+        if (a.group_name === b.group_name && a.subject_code !== b.subject_code && a.group_name !== 'WMC') {
+          found.push({
+            type: 'Section', entity: a.group_name, day, time,
+            slots: [
+              { code: a.subject_code, group: a.group_name },
+              { code: b.subject_code, group: b.group_name },
+            ],
+          });
+        }
+      }
+    }
+
+    return found;
+  }, [allSlots]);
+
+  const clashSummary = useMemo(() => {
+    const room = clashes.filter(c => c.type === 'Room').length;
+    const professor = clashes.filter(c => c.type === 'Professor').length;
+    const section = clashes.filter(c => c.type === 'Section').length;
+    return { room, professor, section, total: room + professor + section };
+  }, [clashes]);
+
   // --- Render Slot (NO TOOLTIP, ALL INFO ON CARD) ---
   // --- Render Slot (With Initials) ---
   // --- Render Slot (Full Names on Separate Lines) ---
   const renderSlotItem = (slot: FetchedSlot) => {
-      const isLab = slot.slot_type === 'Practical';
-      const isTutorial = slot.slot_type === 'Tutorial';
-      
-      const textColor = isLab ? 'text-orange-600' : isTutorial ? 'text-green-800' : 'text-black';
-      const borderColor = 'border-gray-100'; 
-      
-      // 1. Split names by '&' to create an array
-      const profNames = slot.professor_name !== 'Unknown' 
-        ? slot.professor_name.split('&').map(n => n.trim()) 
-        : [];
+    const isLab = slot.slot_type === 'Practical';
+    const isTutorial = slot.slot_type === 'Tutorial';
 
-      return (
-        <div key={slot.id} className={`w-full flex flex-col justify-center items-center text-[9px] leading-tight border-b ${borderColor} last:border-0 p-1 ${textColor} bg-transparent`}>
-              {/* Line 1: Code & Type */}
-              <div className="font-bold whitespace-nowrap">
-                {slot.subject_code} ({slot.slot_type.charAt(0)})
-              </div>
+    const textColor = isLab ? 'text-orange-600' : isTutorial ? 'text-green-800' : 'text-black';
+    const borderColor = 'border-gray-100';
 
-              {/* Line 2: Professor Names (Stacked) */}
-              {profNames.length > 0 && (
-                  <div className="flex flex-col items-center gap-0 my-0.5">
-                      {profNames.map((name, idx) => (
-                          <div key={idx} className="text-[8px] font-bold text-indigo-600 tracking-wide whitespace-nowrap">
-                              {name}
-                          </div>
-                      ))}
-                  </div>
-              )}
+    // 1. Split names by '&' to create an array
+    const profNames = slot.professor_name !== 'Unknown'
+      ? slot.professor_name.split('&').map(n => n.trim())
+      : [];
 
-              {/* Line 3: Room, Group, and Semester */}
-              <div className="scale-90 opacity-90 whitespace-nowrap flex flex-wrap justify-center gap-1 items-center text-black">
-                <span className="text-gray-600">{slot.room_name}</span>
-                <span className="text-gray-300">•</span>
-                <span className="font-semibold text-cyan-800">{slot.group_name}</span>
-                {/* <span className="text-gray-300">•</span>
-                <span className="text-gray-500 font-medium">Sem {slot.semester}</span> */}
-              </div>
+    return (
+      <div key={slot.id} className={`w-full flex flex-col justify-center items-center text-[9px] leading-tight border-b ${borderColor} last:border-0 p-1 ${textColor} bg-transparent`}>
+        {/* Line 1: Code & Type */}
+        <div className="font-bold whitespace-nowrap">
+          {slot.subject_code} ({slot.slot_type.charAt(0)})
         </div>
-      );
+
+        {/* Line 2: Professor Names (Stacked) */}
+        {profNames.length > 0 && (
+          <div className="flex flex-col items-center gap-0 my-0.5">
+            {profNames.map((name, idx) => (
+              <div key={idx} className="text-[8px] font-bold text-indigo-600 tracking-wide whitespace-nowrap">
+                {name}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Line 3: Room, Group, and Semester */}
+        <div className="scale-90 opacity-90 whitespace-nowrap flex flex-wrap justify-center gap-1 items-center text-black">
+          <span className="text-gray-600">{slot.room_name}</span>
+          <span className="text-gray-300">•</span>
+          <span className="font-semibold text-cyan-800">{slot.group_name}</span>
+          {/* <span className="text-gray-300">•</span>
+                <span className="text-gray-500 font-medium">Sem {slot.semester}</span> */}
+        </div>
+      </div>
+    );
   };
 
   // --- Render Cell ---
@@ -258,7 +336,7 @@ export const TimetableViewer: React.FC<ViewerProps> = ({ timetableId, onBack }) 
     if (selectedEntity !== 'All Sections') {
       cellSlots = cellSlots.filter(s =>
         s.group_name === selectedEntity ||
-        s.group_name === 'All' ||
+        s.group_name === 'WMC' ||
         s.group_name === 'all'
       );
     }
@@ -272,7 +350,7 @@ export const TimetableViewer: React.FC<ViewerProps> = ({ timetableId, onBack }) 
     return (
       <div className="h-full flex flex-col justify-start overflow-y-auto custom-scrollbar">
         <div className={isCrowded ? "grid grid-cols-2 gap-1" : "flex flex-col gap-1"}>
-            {cellSlots.map(slot => renderSlotItem(slot))}
+          {cellSlots.map(slot => renderSlotItem(slot))}
         </div>
       </div>
     );
@@ -323,6 +401,22 @@ export const TimetableViewer: React.FC<ViewerProps> = ({ timetableId, onBack }) 
 
   if (loading) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin w-8 h-8 text-indigo-600" /></div>;
 
+  if (timetables.length === 0) {
+    return (
+      <div className="p-4 bg-gray-50 min-h-screen font-sans flex flex-col items-center justify-center">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-10 text-center max-w-md">
+          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Filter className="w-8 h-8 text-gray-300" />
+          </div>
+          <h2 className="text-lg font-bold text-gray-700 mb-2">No Timetables Available</h2>
+          <p className="text-sm text-gray-500">
+            There are no timetables in the database yet. Generate one from the <b>Generator</b> tab or import one from the <b>Import</b> tab to view it here.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-4 bg-gray-50 min-h-screen font-sans">
       <div className="mb-6 bg-white p-4 rounded-lg shadow-sm border flex flex-col md:flex-row justify-between items-center gap-4 sticky top-0 z-20">
@@ -350,6 +444,53 @@ export const TimetableViewer: React.FC<ViewerProps> = ({ timetableId, onBack }) 
           </button>
         </div>
       </div>
+
+      {/* Clash Detection Banner */}
+      {allSlots.length > 0 && (
+        <div className={`mb-3 rounded-lg border shadow-sm ${clashSummary.total === 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+          <button
+            onClick={() => setShowClashDetails(prev => !prev)}
+            className="w-full px-4 py-2.5 flex items-center justify-between text-sm"
+          >
+            <div className="flex items-center gap-2">
+              {clashSummary.total === 0
+                ? <><CheckCircle2 className="w-4 h-4 text-green-600" /><span className="font-semibold text-green-800">No Clashes Detected ✅</span></>
+                : <><AlertTriangle className="w-4 h-4 text-red-600" /><span className="font-semibold text-red-800">{clashSummary.total} Clash{clashSummary.total > 1 ? 'es' : ''} Detected</span></>
+              }
+              {clashSummary.total > 0 && (
+                <div className="flex gap-2 ml-3 text-xs">
+                  {clashSummary.room > 0 && <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">Room: {clashSummary.room}</span>}
+                  {clashSummary.professor > 0 && <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-medium">Professor: {clashSummary.professor}</span>}
+                  {clashSummary.section > 0 && <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium">Section: {clashSummary.section}</span>}
+                </div>
+              )}
+            </div>
+            {clashSummary.total > 0 && (showClashDetails ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />)}
+          </button>
+
+          {showClashDetails && clashes.length > 0 && (
+            <div className="border-t border-red-200 px-4 py-3 max-h-60 overflow-y-auto">
+              <div className="space-y-1.5">
+                {clashes.map((clash, i) => (
+                  <div key={i} className="flex items-center gap-2 text-xs bg-white px-3 py-1.5 rounded border border-gray-100">
+                    <span className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${clash.type === 'Room' ? 'bg-red-100 text-red-700' :
+                      clash.type === 'Professor' ? 'bg-orange-100 text-orange-700' :
+                        'bg-purple-100 text-purple-700'
+                      }`}>{clash.type}</span>
+                    <span className="font-semibold text-gray-700">{clash.entity}</span>
+                    <span className="text-gray-400">•</span>
+                    <span className="text-gray-500">{clash.day} @ {clash.time}</span>
+                    <span className="text-gray-400">→</span>
+                    <span className="text-gray-700">
+                      {clash.slots.map(s => `${s.code} (${s.group})`).join(' vs ')}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="overflow-x-auto bg-white p-1 shadow-lg border border-gray-300 rounded-sm">
         <div ref={pdfRef} className="min-w-max">

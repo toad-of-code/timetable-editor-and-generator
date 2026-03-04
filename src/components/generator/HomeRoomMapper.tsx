@@ -19,7 +19,7 @@ export function HomeRoomMapper({ roomableGroups, rooms, homeRooms, onChange }: P
 
             {roomableGroups.length === 0 ? (
                 <p className="text-sm text-gray-400 italic">
-                    No assignable sections found (only 'All' group exists).
+                    No assignable sections found (only 'WMC' group exists).
                 </p>
             ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
@@ -33,8 +33,8 @@ export function HomeRoomMapper({ roomableGroups, rooms, homeRooms, onChange }: P
                             </span>
                             <select
                                 className={`flex-1 px-2 py-1.5 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${homeRooms[group.id]
-                                        ? 'border-green-400 bg-green-50'
-                                        : 'border-gray-300'
+                                    ? 'border-green-400 bg-green-50'
+                                    : 'border-gray-300'
                                     }`}
                                 value={homeRooms[group.id] ?? ''}
                                 onChange={e => onChange(group.id, e.target.value)}

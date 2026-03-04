@@ -125,7 +125,7 @@ const parseSlotHeuristically = (rawText: string) => {
     text = text.replace(roomMatch[0], ' ');
   }
 
-  let section = 'All';
+  let section = 'WMC';
   const secMatch = text.match(/(?:Sec|Group)\.?\s*([A-Z0-9-/]{1,5})/i);
   if (secMatch) {
     section = `Sec ${secMatch[1]}`;
@@ -592,7 +592,7 @@ const TimetableImporter: React.FC<Props> = ({ onNavigate }) => {
       timeEnd: '10:00',
       subjectCode: '',
       type: 'Lecture',
-      section: 'All',
+      section: 'WMC',
       room: 'TBA',
       facultyName: 'Unknown',
       rawString: ''
