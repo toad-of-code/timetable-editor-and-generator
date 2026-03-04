@@ -39,7 +39,7 @@ export function RoomTimetableViewer({ onBack }: RoomTimetableViewerProps) {
   const [allSlots, setAllSlots] = useState<FetchedSlot[]>([]);
   const [selectedRoom, setSelectedRoom] = useState<string>('');
   const [availableRooms, setAvailableRooms] = useState<string[]>([]);
-  
+
   // 👇 Multi-Select State
   const [isMultiMode, setIsMultiMode] = useState(false);
   const [selectedRooms, setSelectedRooms] = useState<Set<string>>(new Set());
@@ -60,7 +60,7 @@ export function RoomTimetableViewer({ onBack }: RoomTimetableViewerProps) {
     if (!time24) return '';
     const [hourStr, minute] = time24.split(':');
     let hour = parseInt(hourStr);
-    hour = hour % 12 || 12; 
+    hour = hour % 12 || 12;
     return `${hour}:${minute}`;
   };
 
@@ -71,6 +71,8 @@ export function RoomTimetableViewer({ onBack }: RoomTimetableViewerProps) {
       try {
         const { data: published } = await supabase.from('timetables').select('id').eq('status', 'published');
         if (!published || published.length === 0) {
+          setAllSlots([]);
+          setAvailableRooms([]);
           setLoading(false);
           return;
         }
@@ -126,8 +128,8 @@ export function RoomTimetableViewer({ onBack }: RoomTimetableViewerProps) {
   // --- 3. Dynamic Columns ---
   // Calculates columns. In Multi-mode, it considers ALL slots to ensure the grid handles any room.
   const dynamicTimeColumns = useMemo(() => {
-    const targetSlots = isMultiMode ? allSlots : roomSlots; 
-    
+    const targetSlots = isMultiMode ? allSlots : roomSlots;
+
     if (targetSlots.length === 0) return [
       { label: '09:00-10:00', start: '09:00', end: '10:00' },
       { label: 'LUNCH', start: '13:00', end: '14:30', isLunch: true }
@@ -157,13 +159,13 @@ export function RoomTimetableViewer({ onBack }: RoomTimetableViewerProps) {
       const end = filteredTimes[i + 1];
       const isLunch = (start === '13:00' && end === '14:30');
       const isBreak = (start === '10:50' && end === '11:00');
-      
+
       const cStart = parseInt(start.replace(':', ''));
       const cEnd = parseInt(end.replace(':', ''));
       const hasClass = targetSlots.some(s => {
-         const sStart = parseInt(s.start_time.replace(':', ''));
-         const sEnd = parseInt(s.end_time.replace(':', ''));
-         return (sStart < cEnd && sEnd > cStart);
+        const sStart = parseInt(s.start_time.replace(':', ''));
+        const sEnd = parseInt(s.end_time.replace(':', ''));
+        return (sStart < cEnd && sEnd > cStart);
       });
 
       if (isLunch || isBreak || hasClass) {
@@ -202,59 +204,59 @@ export function RoomTimetableViewer({ onBack }: RoomTimetableViewerProps) {
   const handleWorkbookExport = () => {
     // 1. Determine which rooms to export (List or Single)
     const roomsToExport = isMultiMode ? Array.from(selectedRooms) : [selectedRoom];
-    
+
     if (roomsToExport.length === 0) {
-        alert("Please select at least one room.");
-        return;
+      alert("Please select at least one room.");
+      return;
     }
 
     // 2. Prepare Data for EACH room (creates a Sheet object for each)
     const sheetsData = roomsToExport.map(roomName => {
-        // Filter slots specifically for THIS room in the loop
-        const thisRoomSlots = allSlots.filter(s => s.room_name === roomName);
-        
-        // Process Logic (deduplication specific to this room)
-        const processed: FetchedSlot[] = []; 
-        const seen = new Set();
-        thisRoomSlots.forEach(slot => {
-             const key = `${slot.day_of_week}-${slot.start_time}-${slot.group_name}-${slot.subject_code}`;
-             if(!seen.has(key)) { seen.add(key); processed.push(slot); }
-        });
+      // Filter slots specifically for THIS room in the loop
+      const thisRoomSlots = allSlots.filter(s => s.room_name === roomName);
 
-        // Build Rows
-        const headerRow = ['Day', ...dynamicTimeColumns.map(c => c.label)];
-        const bodyRows = DAYS.map((day, dayIndex) => {
-            const row = [day];
-            dynamicTimeColumns.forEach(col => {
-                if(col.isLunch) {
-                    row.push(col.label);
-                } else {
-                    const cS = parseInt(col.start.replace(':',''));
-                    const cE = parseInt(col.end.replace(':',''));
-                    
-                    const cellSlots = processed.filter(s => {
-                        if(s.day_of_week !== dayIndex + 1) return false;
-                        const sS = parseInt(s.start_time.replace(':',''));
-                        const sE = parseInt(s.end_time.replace(':',''));
-                        return (sS <= cS && sE >= cE);
-                    });
+      // Process Logic (deduplication specific to this room)
+      const processed: FetchedSlot[] = [];
+      const seen = new Set();
+      thisRoomSlots.forEach(slot => {
+        const key = `${slot.day_of_week}-${slot.start_time}-${slot.group_name}-${slot.subject_code}`;
+        if (!seen.has(key)) { seen.add(key); processed.push(slot); }
+      });
 
-                    if(cellSlots.length === 0) row.push('');
-                    else {
-                        const txt = cellSlots.map(s => 
-                            `${s.subject_code} (${s.slot_type.charAt(0)}) - ${s.group_name} - ${s.professor_name} - Sem ${s.semester}`
-                        ).join('\n');
-                        row.push(txt);
-                    }
-                }
+      // Build Rows
+      const headerRow = ['Day', ...dynamicTimeColumns.map(c => c.label)];
+      const bodyRows = DAYS.map((day, dayIndex) => {
+        const row = [day];
+        dynamicTimeColumns.forEach(col => {
+          if (col.isLunch) {
+            row.push(col.label);
+          } else {
+            const cS = parseInt(col.start.replace(':', ''));
+            const cE = parseInt(col.end.replace(':', ''));
+
+            const cellSlots = processed.filter(s => {
+              if (s.day_of_week !== dayIndex + 1) return false;
+              const sS = parseInt(s.start_time.replace(':', ''));
+              const sE = parseInt(s.end_time.replace(':', ''));
+              return (sS <= cS && sE >= cE);
             });
-            return row;
-        });
 
-        return {
-            title: roomName,
-            rows: [headerRow, ...bodyRows]
-        };
+            if (cellSlots.length === 0) row.push('');
+            else {
+              const txt = cellSlots.map(s =>
+                `${s.subject_code} (${s.slot_type.charAt(0)}) - ${s.group_name} - ${s.professor_name} - Sem ${s.semester}`
+              ).join('\n');
+              row.push(txt);
+            }
+          }
+        });
+        return row;
+      });
+
+      return {
+        title: roomName,
+        rows: [headerRow, ...bodyRows]
+      };
     });
 
     // 3. Launch Export
@@ -313,6 +315,22 @@ export function RoomTimetableViewer({ onBack }: RoomTimetableViewerProps) {
 
   if (loading) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin w-8 h-8 text-indigo-600" /></div>;
 
+  if (availableRooms.length === 0) {
+    return (
+      <div className="p-4 bg-gray-50 min-h-screen font-sans flex flex-col items-center justify-center">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-10 text-center max-w-md">
+          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Filter className="w-8 h-8 text-gray-300" />
+          </div>
+          <h2 className="text-lg font-bold text-gray-700 mb-2">No Timetable Available</h2>
+          <p className="text-sm text-gray-500">
+            There are no published timetables yet. Generate and publish a timetable from the <b>Generator</b> tab to view room schedules here.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen w-full flex flex-col bg-gray-50 font-sans">
 
@@ -328,13 +346,13 @@ export function RoomTimetableViewer({ onBack }: RoomTimetableViewerProps) {
           </div>
         </div>
         <div className="flex flex-wrap gap-2 items-center">
-          
+
           {/* Toggle Multi-Select Mode */}
-          <button 
+          <button
             onClick={() => setIsMultiMode(!isMultiMode)}
             className={`flex items-center gap-2 px-3 py-2 text-sm rounded border transition ${isMultiMode ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'bg-white border-gray-300 text-gray-700'}`}
           >
-            {isMultiMode ? <CheckSquare className="w-4 h-4"/> : <Square className="w-4 h-4"/>}
+            {isMultiMode ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
             {isMultiMode ? 'Select Rooms' : 'Multi View'}
           </button>
 
@@ -346,10 +364,10 @@ export function RoomTimetableViewer({ onBack }: RoomTimetableViewerProps) {
               </select>
             </div>
           )}
-          
+
           <button onClick={handleWorkbookExport} disabled={isExporting} className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700 transition shadow-sm disabled:opacity-50">
-             {isExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <FileSpreadsheet className="w-3.5 h-3.5" />}
-             {isExporting ? 'Exporting...' : (isMultiMode ? `Export ${selectedRooms.size} Sheets` : 'Export Sheet')}
+            {isExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileSpreadsheet className="w-3.5 h-3.5" />}
+            {isExporting ? 'Exporting...' : (isMultiMode ? `Export ${selectedRooms.size} Sheets` : 'Export Sheet')}
           </button>
 
           {!isMultiMode && (
@@ -362,61 +380,60 @@ export function RoomTimetableViewer({ onBack }: RoomTimetableViewerProps) {
 
       {/* Main Content Area */}
       <div className="flex-1 overflow-auto bg-white p-2">
-        
+
         {isMultiMode ? (
-            /* MULTI-SELECT GRID UI */
-            <div className="p-4">
-                <h2 className="text-lg font-bold mb-4 text-gray-800">Select Rooms to Export</h2>
-                <div className="text-xs text-gray-500 mb-4">Selected rooms will be created as separate tabs in one Google Sheet workbook.</div>
-                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
-                    {availableRooms.map(room => {
-                        const isSelected = selectedRooms.has(room);
-                        return (
-                            <button 
-                                key={room}
-                                onClick={() => toggleRoomSelection(room)}
-                                className={`p-3 rounded border text-sm font-semibold flex items-center justify-between transition-all ${
-                                    isSelected ? 'bg-indigo-600 text-white border-indigo-600 shadow-md transform scale-105' : 'bg-gray-50 text-gray-600 border-gray-200 hover:border-indigo-300'
-                                }`}
-                            >
-                                {room}
-                                {isSelected && <Check className="w-4 h-4 text-white"/>}
-                            </button>
-                        );
-                    })}
-                </div>
+          /* MULTI-SELECT GRID UI */
+          <div className="p-4">
+            <h2 className="text-lg font-bold mb-4 text-gray-800">Select Rooms to Export</h2>
+            <div className="text-xs text-gray-500 mb-4">Selected rooms will be created as separate tabs in one Google Sheet workbook.</div>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
+              {availableRooms.map(room => {
+                const isSelected = selectedRooms.has(room);
+                return (
+                  <button
+                    key={room}
+                    onClick={() => toggleRoomSelection(room)}
+                    className={`p-3 rounded border text-sm font-semibold flex items-center justify-between transition-all ${isSelected ? 'bg-indigo-600 text-white border-indigo-600 shadow-md transform scale-105' : 'bg-gray-50 text-gray-600 border-gray-200 hover:border-indigo-300'
+                      }`}
+                  >
+                    {room}
+                    {isSelected && <Check className="w-4 h-4 text-white" />}
+                  </button>
+                );
+              })}
             </div>
+          </div>
         ) : (
-            /* STANDARD TABLE UI */
-            <div ref={pdfRef} className="min-w-max">
-              <table className="w-full border-collapse border border-black text-center text-xs">
-                <thead>
-                  <tr className="bg-[#e6b8af] h-10 sticky top-0 z-10 shadow-sm">
-                    <th className="border border-black w-14 bg-[#e6b8af]">Day</th>
-                    {dynamicTimeColumns.map((col, idx) => (
-                      <th key={idx} className={`border border-black p-1 ${col.isLunch ? 'w-8 bg-gray-200' : 'bg-[#e6b8af] min-w-[120px]'}`}>
-                        {col.isLunch ? <span className="writing-mode-vertical text-[9px] tracking-widest text-gray-600">{col.label}</span> : col.label}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {DAYS.map((day, dayIndex) => (
-                    <tr key={day} className="border-b border-black bg-white h-40">
-                      <td className="border border-black bg-[#e6b8af] font-bold text-sm writing-mode-vertical md:writing-mode-horizontal">{day}</td>
-                      {dynamicTimeColumns.map((col, cIdx) => {
-                        if (col.isLunch) return <td key={cIdx} className="border border-black bg-gray-100 font-bold writing-mode-vertical text-[10px] tracking-widest text-gray-500 select-none">{col.label}</td>;
-                        return (
-                          <td key={cIdx} className="border border-black p-0 hover:bg-blue-50/10 transition-colors align-top h-40">
-                            {renderCellContent(dayIndex, col)}
-                          </td>
-                        );
-                      })}
-                    </tr>
+          /* STANDARD TABLE UI */
+          <div ref={pdfRef} className="min-w-max">
+            <table className="w-full border-collapse border border-black text-center text-xs">
+              <thead>
+                <tr className="bg-[#e6b8af] h-10 sticky top-0 z-10 shadow-sm">
+                  <th className="border border-black w-14 bg-[#e6b8af]">Day</th>
+                  {dynamicTimeColumns.map((col, idx) => (
+                    <th key={idx} className={`border border-black p-1 ${col.isLunch ? 'w-8 bg-gray-200' : 'bg-[#e6b8af] min-w-[120px]'}`}>
+                      {col.isLunch ? <span className="writing-mode-vertical text-[9px] tracking-widest text-gray-600">{col.label}</span> : col.label}
+                    </th>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </tr>
+              </thead>
+              <tbody>
+                {DAYS.map((day, dayIndex) => (
+                  <tr key={day} className="border-b border-black bg-white h-40">
+                    <td className="border border-black bg-[#e6b8af] font-bold text-sm writing-mode-vertical md:writing-mode-horizontal">{day}</td>
+                    {dynamicTimeColumns.map((col, cIdx) => {
+                      if (col.isLunch) return <td key={cIdx} className="border border-black bg-gray-100 font-bold writing-mode-vertical text-[10px] tracking-widest text-gray-500 select-none">{col.label}</td>;
+                      return (
+                        <td key={cIdx} className="border border-black p-0 hover:bg-blue-50/10 transition-colors align-top h-40">
+                          {renderCellContent(dayIndex, col)}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 

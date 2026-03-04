@@ -54,22 +54,23 @@ function mapType(raw: string | null): CourseResult['type'] {
 // ─── Fetch ───────────────────────────────────────────────────────────────────
 
 async function fetchSemesterSubjects(): Promise<SemesterData[]> {
-    // 1. Fetch all timetables ordered by semester
-    const { data: timetables, error: ttErr } = await supabase
-        .from('timetables')
-        .select('id, semester, academic_year')
-        .order('semester', { ascending: true });
+    // 1. Fetch all active semester clusters
+    const { data: clusters, error: clErr } = await supabase
+        .from('semester_clusters')
+        .select('id, semester_number, batch_year, department')
+        .eq('is_active', true)
+        .order('semester_number', { ascending: true });
 
-    if (ttErr) throw ttErr;
-    if (!timetables || timetables.length === 0) return [];
+    if (clErr) throw clErr;
+    if (!clusters || clusters.length === 0) return [];
 
-    // 2. Fetch all timetable_slots with subject details for those timetables
-    const ttIds = timetables.map((t) => t.id);
+    // 2. Fetch all cluster_requirements with joined subject details
+    const clusterIds = clusters.map(c => c.id);
 
-    const { data: slots, error: slotErr } = await supabase
-        .from('timetable_slots')
+    const { data: requirements, error: reqErr } = await supabase
+        .from('cluster_requirements')
         .select(`
-            timetable_id,
+            cluster_id,
             subject:subject_id (
                 id,
                 code,
@@ -82,32 +83,31 @@ async function fetchSemesterSubjects(): Promise<SemesterData[]> {
                 credits
             )
         `)
-        .in('timetable_id', ttIds);
+        .in('cluster_id', clusterIds);
 
-    if (slotErr) throw slotErr;
+    if (reqErr) throw reqErr;
 
-    // 3. Group subjects by timetable_id, deduplicate by subject id
-    const ttToSubjects = new Map<string, Map<string, any>>();
+    // 3. Group subjects by cluster_id
+    const clusterToSubjects = new Map<string, Map<string, any>>();
 
-    for (const slot of slots ?? []) {
-        const sub = slot.subject as any;
+    for (const req of requirements ?? []) {
+        const sub = req.subject as any;
         if (!sub?.id) continue;
-        if (!ttToSubjects.has(slot.timetable_id)) {
-            ttToSubjects.set(slot.timetable_id, new Map());
+        if (!clusterToSubjects.has(req.cluster_id)) {
+            clusterToSubjects.set(req.cluster_id, new Map());
         }
-        ttToSubjects.get(slot.timetable_id)!.set(sub.id, sub);
+        clusterToSubjects.get(req.cluster_id)!.set(sub.id, sub);
     }
 
-    // 4. Build SemesterData[], one per timetable (deduplicate by semester number)
+    // 4. Build SemesterData[], one per cluster (deduplicate by semester number)
     const semMap = new Map<number, SemesterData>();
 
-    for (const tt of timetables) {
-        const sem: number = tt.semester;
-        if (semMap.has(sem)) continue; // keep first timetable per semester
+    for (const cluster of clusters) {
+        const sem: number = cluster.semester_number;
+        if (semMap.has(sem)) continue; // keep first cluster per semester
 
-        const subjectMap = ttToSubjects.get(tt.id) ?? new Map();
+        const subjectMap = clusterToSubjects.get(cluster.id) ?? new Map();
         const courses: CourseResult[] = [];
-        let idx = 1;
 
         for (const sub of subjectMap.values()) {
             const isElective = mapType(sub.subject_type) === 'Elective';
@@ -121,7 +121,6 @@ async function fetchSemesterSubjects(): Promise<SemesterData[]> {
                 isBasket: isElective,
                 highlight: isElective,
             });
-            idx++;
         }
 
         // Sort: Core first, then Elective/Minor
@@ -129,9 +128,6 @@ async function fetchSemesterSubjects(): Promise<SemesterData[]> {
             const order: Record<string, number> = { Core: 0, Project: 1, ProtoMakers: 2, Elective: 3, Minor: 4 };
             return (order[a.type] ?? 9) - (order[b.type] ?? 9);
         });
-
-        // Re-number after sort
-        courses.forEach((c, i) => { (c as any)._idx = i + 1; });
 
         // For Electives: a student picks ONE per group (HSMC, Basket 1, Basket 2, etc.)
         // Count the max-credit elective from each distinct group
@@ -145,7 +141,6 @@ async function fetchSemesterSubjects(): Promise<SemesterData[]> {
         const electiveCredits = (() => {
             const electives = courses.filter(c => c.type === 'Elective');
             if (electives.length === 0) return 0;
-            // group by electiveGroup (fallback: 'Elective' if no group stored)
             const groups = new Map<string, number[]>();
             electives.forEach(c => {
                 const g = c.electiveGroup ?? 'Elective';
@@ -153,7 +148,6 @@ async function fetchSemesterSubjects(): Promise<SemesterData[]> {
                 if (!groups.has(g)) groups.set(g, []);
                 groups.get(g)!.push(val);
             });
-            // Sum the max credit from each group
             let total = 0;
             groups.forEach(vals => { total += Math.max(...vals); });
             return total;
@@ -163,7 +157,7 @@ async function fetchSemesterSubjects(): Promise<SemesterData[]> {
 
         semMap.set(sem, {
             semesterNum: sem,
-            academicYear: tt.academic_year ?? '—',
+            academicYear: `${cluster.batch_year}-${cluster.batch_year + 1}`,
             totalCredits,
             courses,
         });
