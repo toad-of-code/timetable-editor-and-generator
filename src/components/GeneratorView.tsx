@@ -200,7 +200,7 @@ export function GeneratorView() {
         } finally {
             setIsRunning(false);
         }
-    }, [clusterSubjects, clusterGroups, rooms, assignments, homeRooms]);
+    }, [clusterSubjects, clusterGroups, rooms, assignments, homeRooms, seedTimetableId, clusters, selectedClusterId]);
 
     // ─── Cancel Solver ────────────────────────────────────────────────────────
     const handleCancel = useCallback(() => {

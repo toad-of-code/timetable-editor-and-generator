@@ -19,6 +19,7 @@ interface FetchedSlot {
   slot_type: 'Lecture' | 'Tutorial' | 'Practical';
   subject_code: string;
   subject_name: string;
+  subject_type: string;
   group_name: string;
   room_name: string;
   professor_name: string;
@@ -87,7 +88,7 @@ export const TimetableViewer: React.FC<ViewerProps> = ({ timetableId, onBack }) 
         .from('timetable_slots')
         .select(`
           id, day_of_week, start_time, end_time, slot_type,
-          subjects (code, name), professors (name), rooms (name), student_groups (name)
+          subjects (code, name, subject_type), professors (name), rooms (name), student_groups (name)
         `)
         .eq('timetable_id', selectedTimetableId);
 
@@ -102,6 +103,7 @@ export const TimetableViewer: React.FC<ViewerProps> = ({ timetableId, onBack }) 
         slot_type: s.slot_type,
         subject_code: extractVal(s.subjects, 'code'),
         subject_name: extractVal(s.subjects, 'name'),
+        subject_type: extractVal(s.subjects, 'subject_type'),
         professor_name: extractVal(s.professors, 'name'),
         room_name: extractVal(s.rooms, 'name'),
         group_name: extractVal(s.student_groups, 'name').replace('Sec', '').trim()
@@ -204,7 +206,7 @@ export const TimetableViewer: React.FC<ViewerProps> = ({ timetableId, onBack }) 
   const [showClashDetails, setShowClashDetails] = useState(false);
 
   interface Clash {
-    type: 'Room' | 'Professor' | 'Section';
+    type: 'Room' | 'Professor' | 'Section' | 'WMC-Section';
     entity: string;
     day: string;
     time: string;
@@ -253,10 +255,28 @@ export const TimetableViewer: React.FC<ViewerProps> = ({ timetableId, onBack }) 
           });
         }
 
-        // Section clash (same group, different subjects — skip WMC elective overlaps)
-        if (a.group_name === b.group_name && a.subject_code !== b.subject_code && a.group_name !== 'WMC') {
+        // Section clash (same group, different subjects)
+        // Only skip when BOTH are electives on WMC (concurrent alternatives)
+        if (a.group_name === b.group_name && a.subject_code !== b.subject_code) {
+          const bothElective = a.subject_type === 'Elective' && b.subject_type === 'Elective';
+          if (!(a.group_name === 'WMC' && bothElective)) {
+            found.push({
+              type: 'Section', entity: a.group_name, day, time,
+              slots: [
+                { code: a.subject_code, group: a.group_name },
+                { code: b.subject_code, group: b.group_name },
+              ],
+            });
+          }
+        }
+
+        // WMC-Section clash: WMC session overlaps with a section session
+        const aIsWMC = a.group_name === 'WMC';
+        const bIsWMC = b.group_name === 'WMC';
+        if (aIsWMC !== bIsWMC) {
+          // One is WMC, the other is a section → clash
           found.push({
-            type: 'Section', entity: a.group_name, day, time,
+            type: 'WMC-Section', entity: aIsWMC ? b.group_name : a.group_name, day, time,
             slots: [
               { code: a.subject_code, group: a.group_name },
               { code: b.subject_code, group: b.group_name },
@@ -273,7 +293,8 @@ export const TimetableViewer: React.FC<ViewerProps> = ({ timetableId, onBack }) 
     const room = clashes.filter(c => c.type === 'Room').length;
     const professor = clashes.filter(c => c.type === 'Professor').length;
     const section = clashes.filter(c => c.type === 'Section').length;
-    return { room, professor, section, total: room + professor + section };
+    const wmcSection = clashes.filter(c => c.type === 'WMC-Section').length;
+    return { room, professor, section, wmcSection, total: room + professor + section + wmcSection };
   }, [clashes]);
 
   // --- Render Slot (NO TOOLTIP, ALL INFO ON CARD) ---
@@ -462,6 +483,7 @@ export const TimetableViewer: React.FC<ViewerProps> = ({ timetableId, onBack }) 
                   {clashSummary.room > 0 && <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">Room: {clashSummary.room}</span>}
                   {clashSummary.professor > 0 && <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-medium">Professor: {clashSummary.professor}</span>}
                   {clashSummary.section > 0 && <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium">Section: {clashSummary.section}</span>}
+                  {clashSummary.wmcSection > 0 && <span className="bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full font-medium">WMC-Section: {clashSummary.wmcSection}</span>}
                 </div>
               )}
             </div>
@@ -475,7 +497,8 @@ export const TimetableViewer: React.FC<ViewerProps> = ({ timetableId, onBack }) 
                   <div key={i} className="flex items-center gap-2 text-xs bg-white px-3 py-1.5 rounded border border-gray-100">
                     <span className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${clash.type === 'Room' ? 'bg-red-100 text-red-700' :
                       clash.type === 'Professor' ? 'bg-orange-100 text-orange-700' :
-                        'bg-purple-100 text-purple-700'
+                        clash.type === 'WMC-Section' ? 'bg-teal-100 text-teal-700' :
+                          'bg-purple-100 text-purple-700'
                       }`}>{clash.type}</span>
                     <span className="font-semibold text-gray-700">{clash.entity}</span>
                     <span className="text-gray-400">•</span>
