@@ -51,6 +51,7 @@ export function ProfessorTimetableViewer({ onBack }: ProfessorTimetableViewerPro
   const pdfRef = useRef<HTMLDivElement>(null);
 
   // --- Helpers ---
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const extractVal = (data: any, key: string) => {
     if (!data) return 'N/A';
     if (Array.isArray(data)) return data.length > 0 ? data[0][key] : 'N/A';
@@ -80,6 +81,7 @@ export function ProfessorTimetableViewer({ onBack }: ProfessorTimetableViewerPro
 
       if (error) throw error;
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const rawData = data as any[];
       const cleanSlots: FetchedSlot[] = rawData
         .filter(s => s.professors?.name)
@@ -162,7 +164,7 @@ export function ProfessorTimetableViewer({ onBack }: ProfessorTimetableViewerPro
       return true;
     });
 
-    let cols: TimeColumn[] = [];
+    const cols: TimeColumn[] = [];
     for (let i = 0; i < filteredTimes.length - 1; i++) {
       const start = filteredTimes[i];
       const end = filteredTimes[i + 1];
@@ -253,7 +255,7 @@ export function ProfessorTimetableViewer({ onBack }: ProfessorTimetableViewerPro
     const colStart = parseInt(column.start.replace(':', ''));
     const colEnd = parseInt(column.end.replace(':', ''));
 
-    let cellSlots = processedSlots.filter(s => {
+    const cellSlots = processedSlots.filter(s => {
       if (s.day_of_week !== dayIndex + 1) return false;
       const slotStart = parseInt(s.start_time.replace(':', ''));
       const slotEnd = parseInt(s.end_time.replace(':', ''));

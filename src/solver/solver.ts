@@ -1,4 +1,4 @@
-import type { SolverInput, SolverProgress, SolverResult, Solution, FitnessResult } from './types';
+import type { SolverInput, SolverProgress, SolverResult, Solution, Gene, FitnessResult } from './types';
 import { generateInitialSolution, mutate } from './mutations';
 import { evaluate } from './constraints';
 
@@ -14,21 +14,35 @@ import { evaluate } from './constraints';
  * - Stagnation restart: re-randomize if no improvement for 10k generations
  * - σ clamped to [0.5, 30] for problem-appropriate range
  * - Optional seedSolution for warm-starting from an existing timetable
+ * - Optional lockedGenes for pinning published timetable slots
  */
 export function runSolver(
     input: SolverInput,
     onProgress: (p: SolverProgress) => void,
     cancelToken: { cancelled: boolean },
     seedSolution?: Solution,
+    lockedGenes?: Gene[],
 ): Promise<SolverResult> {
     return new Promise((resolve) => {
-        const { config } = input;
+        const { config, sessions } = input;
         const startTime = performance.now();
+
+        // Helper: overwrite locked session positions in a solution
+        function pinLockedGenes(sol: Solution) {
+            if (!lockedGenes || lockedGenes.length === 0) return;
+            // Locked sessions are appended at the end of the sessions array.
+            // Their positions start at index (sessions.length - lockedGenes.length).
+            const lockedStart = sessions.length - lockedGenes.length;
+            for (let i = 0; i < lockedGenes.length; i++) {
+                sol[lockedStart + i] = { ...lockedGenes[i] };
+            }
+        }
 
         // ── State: use seed if provided, otherwise generate random ──
         let parent: Solution = seedSolution
             ? seedSolution.map(g => ({ ...g }))
             : generateInitialSolution(input);
+        pinLockedGenes(parent);
         let parentFitness: FitnessResult = evaluate(input, parent);
 
         let bestSolution: Solution = parent.map(g => ({ ...g }));
@@ -132,6 +146,7 @@ export function runSolver(
                 // 5. Stagnation restart: if stuck, re-randomize parent (keep best)
                 if (stagnationCounter >= STAGNATION_LIMIT) {
                     parent = generateInitialSolution(input);
+                    pinLockedGenes(parent);
                     parentFitness = evaluate(input, parent);
                     sigma = config.initialSigma;
                     stagnationCounter = 0;

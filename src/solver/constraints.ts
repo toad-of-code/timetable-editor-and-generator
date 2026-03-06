@@ -11,6 +11,7 @@ import { SLOTS_PER_DAY, BREAK_AFTER_SLOTS } from './constants';
 function countTimeBoundaryViolations(sessions: ClassSession[], solution: Solution): number {
     let violations = 0;
     for (let i = 0; i < sessions.length; i++) {
+        if (sessions[i].isLocked) continue;
         const endSlot = solution[i].startBucket + sessions[i].duration - 1;
         if (endSlot > SLOTS_PER_DAY) violations++;
     }
@@ -27,12 +28,12 @@ function countTimeBoundaryViolations(sessions: ClassSession[], solution: Solutio
 function countBreakViolations(sessions: ClassSession[], solution: Solution): number {
     let violations = 0;
     for (let i = 0; i < sessions.length; i++) {
-        const start = solution[i].startBucket;
-        const duration = sessions[i].duration;
-        if (duration <= 1) continue; // single-slot sessions can't cross breaks
+        const session = sessions[i];
+        if (session.isLocked || session.duration <= 1) continue;
 
+        const start = solution[i].startBucket;
         // Check if the session spans across any break boundary
-        for (let s = start; s < start + duration - 1; s++) {
+        for (let s = start; s < start + session.duration - 1; s++) {
             if (BREAK_AFTER_SLOTS.includes(s)) {
                 violations++;
                 break; // count at most 1 violation per session
@@ -79,7 +80,12 @@ function countRoomOverlaps(
     const map = buildOccupancyMap(sessions, solution, (_s, g) => `R${rooms[g.roomIndex]?.id ?? g.roomIndex}`);
     let violations = 0;
     for (const arr of map.values()) {
-        if (arr.length > 1) violations += arr.length - 1;
+        if (arr.length > 1) {
+            let lockedCount = 0;
+            for (const idx of arr) if (sessions[idx].isLocked) lockedCount++;
+            const baseline = lockedCount > 1 ? lockedCount - 1 : 0;
+            violations += (arr.length - 1) - baseline;
+        }
     }
     return violations;
 }
@@ -89,10 +95,19 @@ function countRoomOverlaps(
  * A professor can teach at most one session at any given slot.
  */
 function countProfessorOverlaps(sessions: ClassSession[], solution: Solution): number {
-    const map = buildOccupancyMap(sessions, solution, (s) => `P${s.professorId}`);
+    // Use unique keys for empty professorId so they never collide
+    const map = buildOccupancyMap(sessions, solution, (s) =>
+        s.professorId ? `P${s.professorId}` : `P__EMPTY_${s.id}`
+    );
     let violations = 0;
-    for (const arr of map.values()) {
-        if (arr.length > 1) violations += arr.length - 1;
+    for (const [key, arr] of map.entries()) {
+        if (key.startsWith('P__EMPTY_')) continue;
+        if (arr.length > 1) {
+            let lockedCount = 0;
+            for (const idx of arr) if (sessions[idx].isLocked) lockedCount++;
+            const baseline = lockedCount > 1 ? lockedCount - 1 : 0;
+            violations += (arr.length - 1) - baseline;
+        }
     }
     return violations;
 }
@@ -101,33 +116,43 @@ function countProfessorOverlaps(sessions: ClassSession[], solution: Solution): n
  * Constraint: Student Group Non-Overlap.
  * A student group can attend at most one session at any given slot.
  *
- * EXCEPTION: Elective sessions sharing the same group+time are NOT violations,
- * because they are concurrent alternatives (students choose one).
- * However, an elective overlapping with a non-elective IS a violation.
+ * Exception: sessions from the SAME synced basket are intentionally
+ * concurrent (students pick one), so they must NOT be counted as violations.
  */
 function countGroupOverlaps(sessions: ClassSession[], solution: Solution): number {
     const map = buildOccupancyMap(sessions, solution, (s) => `G${s.groupId}`);
     let violations = 0;
     for (const arr of map.values()) {
         if (arr.length <= 1) continue;
+        // Pairwise check — skip pairs that belong to the same SYNCED basket
+        // (those are concurrent by design; handled by the basket sync constraint)
+        for (let i = 0; i < arr.length - 1; i++) {
+            for (let j = i + 1; j < arr.length; j++) {
+                const sA = sessions[arr[i]];
+                const sB = sessions[arr[j]];
 
-        // Count how many are elective vs non-elective
-        let electiveCount = 0;
-        let nonElectiveCount = 0;
-        for (const idx of arr) {
-            if (sessions[idx].isElective) electiveCount++;
-            else nonElectiveCount++;
-        }
+                // Cross-semester group isolation:
+                // If either session is locked, it belongs to a DIFFERENT semester's timetable.
+                // An active Sem 6 group does not overlap with a locked Sem 2 group.
+                // (Any internal conflicts within locked sessions were already handled/ignored.)
+                if (sA.isLocked || sB.isLocked) continue;
 
-        // Non-elective overlaps with anything = violation
-        if (nonElectiveCount > 1) {
-            violations += nonElectiveCount - 1;
+                // Both in same basket (synced or free) → intentional/allowed, not a violation.
+                // Students only pick one subject per basket.
+                if (
+                    sA.basketName &&
+                    sA.basketName === sB.basketName
+                ) continue;
+
+                // Both are electives (even from DIFFERENT baskets) → not a violation.
+                // If they are from different baskets, the global anti-clash rule (step 2C)
+                // handles whether they are allowed to be concurrent.
+                // As far as the *Section/Group* is concerned, concurrent electives are just options.
+                if (sA.isElective && sB.isElective) continue;
+
+                violations++;
+            }
         }
-        // If any non-elective overlaps with electives, that's also a violation
-        if (nonElectiveCount > 0 && electiveCount > 0) {
-            violations += Math.min(nonElectiveCount, 1); // count the overlap once
-        }
-        // Elective-vs-elective: NOT a violation (they're concurrent options)
     }
     return violations;
 }
@@ -172,36 +197,97 @@ function computeGapPenalty(sessions: ClassSession[], solution: Solution, numDays
 
 // ─── Combined Fitness Evaluation ───────────────────────────────────────────────
 
+// ─── Basket Configuration ───────────────────────────────────────────────────────
+
 /**
- * Constraint: Elective Synchronization.
- * All elective sessions with the same (slotType, electiveSlotIndex) must be
- * scheduled at the same (day, startBucket). This allows students to choose
- * one elective from a set of concurrent options.
+ * Synced baskets: ALL subjects in the basket must run at the SAME timeslot
+ * (students pick one from the basket, so concurrent scheduling is intentional).
+ */
+const SYNCED_BASKETS = new Set(['HSMC', 'MDM']);
+
+/** Returns true if the given basket name is a synced basket. */
+function isSyncedBasket(basketName: string | null): boolean {
+    return basketName !== null && SYNCED_BASKETS.has(basketName);
+}
+
+/**
+ * Constraint: Basket-Aware Elective Scheduling.
+ *
+ * Two rules applied here:
+ *
+ * A) SYNCED baskets (HSMC, MDM, lang):
+ *    All elective Lecture#N sessions in the same synced basket must be at
+ *    the same (day, startBucket). Violation if they differ.
+ *
+ * B) FREE baskets (basket-1, basket-2, and any unnamed basket):
+ *    No two sessions in the same free basket should share a (day, startBucket).
+ *    Violation if two basket members are at the same slot.
+ *
+ * C) GLOBAL anti-clash:
+ *    No two elective sessions from DIFFERENT baskets (or one synced + one free)
+ *    should share a (day, startBucket). This ensures a student can theoretically
+ *    attend sessions from multiple baskets without time conflict.
  */
 function countElectiveSyncViolations(sessions: ClassSession[], solution: Solution): number {
-    // Group elective sessions by their sync key: "slotType-electiveSlotIndex"
-    const groups = new Map<string, number[]>();
+    // --- Step 1: Group by basket name + slotType + electiveSlotIndex ---
+    // Key: "basketName|slotType|electiveSlotIndex"
+    const basketGroups = new Map<string, number[]>(); // per-basket groups
+
     for (let i = 0; i < sessions.length; i++) {
-        if (!sessions[i].isElective || sessions[i].electiveSlotIndex < 0) continue;
-        const key = `${sessions[i].slotType}-${sessions[i].electiveSlotIndex}`;
-        const arr = groups.get(key);
-        if (arr) arr.push(i);
-        else groups.set(key, [i]);
+        const s = sessions[i];
+        if (s.isLocked || !s.isElective || !s.basketName || s.electiveSlotIndex < 0) continue;
+
+        // Per-basket per-slotType grouping
+        const groupKey = `${s.basketName}|${s.slotType}|${s.electiveSlotIndex}`;
+        const arr = basketGroups.get(groupKey) ?? [];
+        arr.push(i);
+        basketGroups.set(groupKey, arr);
     }
 
     let violations = 0;
-    for (const indices of groups.values()) {
+
+    // --- Step 2A: Synced basket violations (must be same slot) ---
+    for (const [groupKey, indices] of basketGroups.entries()) {
+        const basketName = groupKey.split('|')[0];
+        if (!isSyncedBasket(basketName)) continue;
         if (indices.length <= 1) continue;
-        // All sessions in this group must have the same (day, startBucket)
+
         const refDay = solution[indices[0]].day;
         const refStart = solution[indices[0]].startBucket;
         for (let k = 1; k < indices.length; k++) {
-            const gene = solution[indices[k]];
-            if (gene.day !== refDay || gene.startBucket !== refStart) {
-                violations++;
-            }
+            const g = solution[indices[k]];
+            if (g.day !== refDay || g.startBucket !== refStart) violations++;
         }
     }
+
+    // --- Step 2B: Free basket violations ---
+    // Previously we forced free basket members to be in different slots.
+    // Given the sheer volume of electives (e.g. 100+ sessions for WMC), 
+    // it's mathematically impossible for them to be in unique slots.
+    // They are "free" because they CAN overlap or be spread out as needed.
+    // So there is no penalty for free basket members overlapping with each other.
+
+    // --- Step 2C: Global anti-clash across baskets ---
+    // Build slot → list of baskets occupying it (each synced basket counts once per slot)
+    const slotToBaskets = new Map<string, Set<string>>();
+    for (let i = 0; i < sessions.length; i++) {
+        const s = sessions[i];
+        if (s.isLocked || !s.isElective || !s.basketName) continue;
+        const gene = solution[i];
+        for (let bucket = gene.startBucket; bucket < gene.startBucket + s.duration; bucket++) {
+            const slotKey = `${gene.day}:${bucket}`;
+            const basketsAtSlot = slotToBaskets.get(slotKey) ?? new Set<string>();
+            basketsAtSlot.add(s.basketName);
+            slotToBaskets.set(slotKey, basketsAtSlot);
+        }
+    }
+    for (const baskets of slotToBaskets.values()) {
+        if (baskets.size > 1) {
+            // Multiple different baskets at the same slot = violation
+            violations += baskets.size - 1;
+        }
+    }
+
     return violations;
 }
 
@@ -216,7 +302,7 @@ function countLabRoomViolations(
 ): number {
     let violations = 0;
     for (let i = 0; i < sessions.length; i++) {
-        if (sessions[i].slotType !== 'Practical') continue;
+        if (sessions[i].isLocked || sessions[i].slotType !== 'Practical') continue;
         const room = rooms[solution[i].roomIndex];
         if (!room || room.roomType !== 'Lab') violations++;
     }
@@ -229,27 +315,38 @@ function countLabRoomViolations(
  * section-level session, because WMC means ALL students are in that class.
  */
 function countWMCSectionOverlaps(sessions: ClassSession[], solution: Solution): number {
-    // Build occupancy: (day, slot) → { wmcCount, sectionCount }
-    const slotMap = new Map<string, { wmc: number; section: number }>();
+    // Build occupancy: (day, slot) → { wmc: number[], section: number[] }
+    const slotMap = new Map<string, { wmc: number[]; section: number[] }>();
     for (let i = 0; i < sessions.length; i++) {
+        if (sessions[i].isLocked) continue; // WMC-Section logic only applies within the active cluster
+
         const gene = solution[i];
         const end = gene.startBucket + sessions[i].duration - 1;
         for (let s = gene.startBucket; s <= end; s++) {
             const key = `${gene.day}:${s}`;
             let entry = slotMap.get(key);
             if (!entry) {
-                entry = { wmc: 0, section: 0 };
+                entry = { wmc: [], section: [] };
                 slotMap.set(key, entry);
             }
-            if (sessions[i].isWMCGroup) entry.wmc++;
-            else entry.section++;
+            if (sessions[i].isWMCGroup) entry.wmc.push(i);
+            else entry.section.push(i);
         }
     }
 
     let violations = 0;
     for (const { wmc, section } of slotMap.values()) {
-        if (wmc > 0 && section > 0) {
-            violations += section; // each section session colliding with WMC is a violation
+        if (wmc.length > 0 && section.length > 0) {
+            // A section session colliding with WMC is a violation UNLESS
+            // they are both electives (handled by global anti-clash)
+            for (const sIdx of section) {
+                const sSession = sessions[sIdx];
+                for (const wIdx of wmc) {
+                    const wSession = sessions[wIdx];
+                    if (sSession.isElective && wSession.isElective) continue;
+                    violations++;
+                }
+            }
         }
     }
     return violations;

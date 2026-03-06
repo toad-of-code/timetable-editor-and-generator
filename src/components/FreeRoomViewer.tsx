@@ -55,7 +55,7 @@ export function FreeRoomViewer({ onBack }: FreeRoomViewerProps) {
     try {
       // Always fetch ALL rooms from the master rooms table
       const { data: roomData } = await supabase.from('rooms').select('name').order('name');
-      const roomNames = (roomData || []).map((r: any) => r.name as string);
+      const roomNames = (roomData || []).map((r: { name: string }) => r.name);
       setAllRooms(roomNames);
       const buildings = Array.from(new Set(roomNames.map(r => getBuildingName(r)))).sort();
       setAvailableBuildings(buildings);
@@ -70,6 +70,7 @@ export function FreeRoomViewer({ onBack }: FreeRoomViewerProps) {
           .select(`day_of_week, start_time, end_time, rooms (name)`)
           .in('timetable_id', pubIds);
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const cleanBusy = (slotData || []).filter((s: any) => s.rooms?.name).map((s: any) => ({
           day_of_week: s.day_of_week,
           start_time: s.start_time.slice(0, 5),
@@ -171,7 +172,7 @@ export function FreeRoomViewer({ onBack }: FreeRoomViewerProps) {
       const pdf = new jsPDF({ orientation: 'l', unit: 'mm', format: [element.scrollWidth * 0.264583 + 10, element.scrollHeight * 0.264583 + 10] });
       pdf.addImage(imgData, 'PNG', 5, 5, element.scrollWidth * 0.264583, element.scrollHeight * 0.264583);
       pdf.save(`Free-Rooms-${selectedBuilding}.pdf`);
-    } catch (err) { alert('PDF Error'); } finally { document.body.style.cursor = originalCursor; }
+    } catch { alert('PDF Error'); } finally { document.body.style.cursor = originalCursor; }
   };
 
   if (loading) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin w-8 h-8 text-green-600" /></div>;

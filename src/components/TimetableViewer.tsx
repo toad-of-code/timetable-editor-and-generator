@@ -40,6 +40,7 @@ export const TimetableViewer: React.FC<ViewerProps> = ({ timetableId, onBack }) 
   const [timetableName, setTimetableName] = useState('');
   const [allSlots, setAllSlots] = useState<FetchedSlot[]>([]);
   const [selectedTimetableId, setSelectedTimetableId] = useState<string>(timetableId || '');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [timetables, setTimetables] = useState<any[]>([]);
   const pdfRef = useRef<HTMLDivElement>(null);
 
@@ -47,6 +48,7 @@ export const TimetableViewer: React.FC<ViewerProps> = ({ timetableId, onBack }) 
   const [selectedEntity, setSelectedEntity] = useState<string>('All Sections');
 
   // --- Helpers ---
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const extractVal = (data: any, key: string) => {
     if (!data) return 'N/A';
     if (Array.isArray(data)) return data.length > 0 ? data[0][key] : 'N/A';
@@ -78,6 +80,7 @@ export const TimetableViewer: React.FC<ViewerProps> = ({ timetableId, onBack }) 
   // 2. Fetch Slots
   useEffect(() => {
     if (!selectedTimetableId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
 
     const fetchData = async () => {
@@ -94,6 +97,7 @@ export const TimetableViewer: React.FC<ViewerProps> = ({ timetableId, onBack }) 
 
       if (error) { setLoading(false); return; }
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const rawData = data as any[];
       const cleanSlots: FetchedSlot[] = rawData.map(s => ({
         id: s.id,
@@ -123,11 +127,9 @@ export const TimetableViewer: React.FC<ViewerProps> = ({ timetableId, onBack }) 
     return Array.from(unique);
   }, [allSections]);
 
-  useEffect(() => {
-    if (dropdownOptions.length > 0 && !dropdownOptions.includes(selectedEntity)) {
-      setSelectedEntity(dropdownOptions[0]);
-    }
-  }, [dropdownOptions]);
+  if (dropdownOptions.length > 0 && !dropdownOptions.includes(selectedEntity)) {
+    setSelectedEntity(dropdownOptions[0]);
+  }
 
   // --- 4. DYNAMIC COLUMNS ---
   const dynamicTimeColumns = useMemo(() => {
@@ -154,7 +156,7 @@ export const TimetableViewer: React.FC<ViewerProps> = ({ timetableId, onBack }) 
       return true;
     });
 
-    let cols: TimeColumn[] = [];
+    const cols: TimeColumn[] = [];
     for (let i = 0; i < filteredTimes.length - 1; i++) {
       const start = filteredTimes[i];
       const end = filteredTimes[i + 1];
@@ -245,7 +247,7 @@ export const TimetableViewer: React.FC<ViewerProps> = ({ timetableId, onBack }) 
         }
 
         // Professor clash
-        if (a.professor_name === b.professor_name && a.professor_name !== 'N/A') {
+        if (a.professor_name === b.professor_name && a.professor_name !== 'N/A' && a.professor_name !== 'Unknown' && a.professor_name !== 'TBD') {
           found.push({
             type: 'Professor', entity: a.professor_name, day, time,
             slots: [
@@ -255,11 +257,12 @@ export const TimetableViewer: React.FC<ViewerProps> = ({ timetableId, onBack }) 
           });
         }
 
+        const bothElectives = (a.subject_type === 'Elective' || a.subject_type === 'Minor') &&
+          (b.subject_type === 'Elective' || b.subject_type === 'Minor');
+
         // Section clash (same group, different subjects)
-        // Only skip when BOTH are electives on WMC (concurrent alternatives)
         if (a.group_name === b.group_name && a.subject_code !== b.subject_code) {
-          const bothElective = a.subject_type === 'Elective' && b.subject_type === 'Elective';
-          if (!(a.group_name === 'WMC' && bothElective)) {
+          if (!bothElectives) {
             found.push({
               type: 'Section', entity: a.group_name, day, time,
               slots: [
@@ -271,17 +274,19 @@ export const TimetableViewer: React.FC<ViewerProps> = ({ timetableId, onBack }) 
         }
 
         // WMC-Section clash: WMC session overlaps with a section session
-        const aIsWMC = a.group_name === 'WMC';
-        const bIsWMC = b.group_name === 'WMC';
+        const aIsWMC = a.group_name === 'WMC' || a.group_name === 'IT-BI';
+        const bIsWMC = b.group_name === 'WMC' || b.group_name === 'IT-BI';
         if (aIsWMC !== bIsWMC) {
           // One is WMC, the other is a section → clash
-          found.push({
-            type: 'WMC-Section', entity: aIsWMC ? b.group_name : a.group_name, day, time,
-            slots: [
-              { code: a.subject_code, group: a.group_name },
-              { code: b.subject_code, group: b.group_name },
-            ],
-          });
+          if (!bothElectives) {
+            found.push({
+              type: 'WMC-Section', entity: aIsWMC ? b.group_name : a.group_name, day, time,
+              slots: [
+                { code: a.subject_code, group: a.group_name },
+                { code: b.subject_code, group: b.group_name },
+              ],
+            });
+          }
         }
       }
     }

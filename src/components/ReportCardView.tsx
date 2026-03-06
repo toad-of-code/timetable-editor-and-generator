@@ -88,9 +88,11 @@ async function fetchSemesterSubjects(): Promise<SemesterData[]> {
     if (reqErr) throw reqErr;
 
     // 3. Group subjects by cluster_id
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const clusterToSubjects = new Map<string, Map<string, any>>();
 
     for (const req of requirements ?? []) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const sub = req.subject as any;
         if (!sub?.id) continue;
         if (!clusterToSubjects.has(req.cluster_id)) {

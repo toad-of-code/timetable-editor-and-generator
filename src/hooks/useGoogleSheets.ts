@@ -18,7 +18,7 @@ export function useGoogleSheets() {
 
   // --- Helper: Create Workbook & Apply Styling ---
   const createWorkbook = async (accessToken: string, filename: string, sheetsData: SheetData[]) => {
-    
+
     // 1. Define the Pink Color (Matches #e6b8af)
     const pinkColor = { red: 0.9, green: 0.72, blue: 0.69 };
 
@@ -40,8 +40,9 @@ export function useGoogleSheets() {
     if (!createRes.ok) throw new Error('Failed to create spreadsheet');
     const spreadsheetData = await createRes.json();
     const spreadsheetId = spreadsheetData.spreadsheetId;
-    
+
     // 4. Map Titles to Sheet IDs (Google assigns random IDs, we need to track them)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const sheetIdsMap = spreadsheetData.sheets.reduce((acc: any, s: any) => {
       acc[s.properties.title] = s.properties.sheetId;
       return acc;
@@ -49,7 +50,7 @@ export function useGoogleSheets() {
 
     // 5. Prepare Data Payload (Bulk Upload)
     const dataPayload = sheetsData.map(sheet => ({
-      range: `${sheet.title}!A1`, 
+      range: `${sheet.title}!A1`,
       values: sheet.rows
     }));
 
@@ -63,6 +64,7 @@ export function useGoogleSheets() {
     });
 
     // 6. Prepare Formatting Payload (Bulk Styling)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const requests: any[] = [];
 
     sheetsData.forEach(sheet => {
@@ -122,16 +124,17 @@ export function useGoogleSheets() {
     setIsExporting(true);
     const toastId = toast.loading('Waiting for Google Sign-in...');
 
-    // @ts-ignore
+    // @ts-expect-error - google is loaded from external script
     const client = google.accounts.oauth2.initTokenClient({
       client_id: CLIENT_ID,
       scope: SCOPES,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       callback: async (tokenResponse: any) => {
         if (tokenResponse.access_token) {
           try {
             toast.loading(`Creating ${sheetsData.length} sheets...`, { id: toastId });
             const url = await createWorkbook(tokenResponse.access_token, filename, sheetsData);
-            
+
             toast.success('Workbook created!', { id: toastId });
             window.open(url, '_blank');
           } catch (err) {
@@ -141,8 +144,8 @@ export function useGoogleSheets() {
             setIsExporting(false);
           }
         } else {
-            toast.dismiss(toastId);
-            setIsExporting(false);
+          toast.dismiss(toastId);
+          setIsExporting(false);
         }
       },
     });

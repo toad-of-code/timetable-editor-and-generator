@@ -1,18 +1,20 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { Settings, Calendar, Sparkles, AlertCircle, Loader2, Wand2, Database } from 'lucide-react';
+import { Settings, Calendar, Sparkles, AlertCircle, Loader2, Wand2, Database, Lock } from 'lucide-react';
 import { useGeneratorData } from '../hooks/useGeneratorData';
 import { ClusterSelector } from './generator/ClusterSelector';
 import { HomeRoomMapper } from './generator/HomeRoomMapper';
 import { AssignmentMatrix } from './generator/AssignmentMatrix';
 import { SolverProgressCard } from './generator/SolverProgress';
 import { SolverResults } from './generator/SolverResults';
-import { prepareSolverInput, buildSeedSolution } from '../solver/dataPrep';
-import type { TimetableSlotRow } from '../solver/dataPrep';
+import { prepareSolverInput, buildSeedSolution, buildLockedSessions } from '../solver/dataPrep';
+import type { TimetableSlotRow, PublishedSlotRow } from '../solver/dataPrep';
 import { runSolver } from '../solver/solver';
+import { generateSolverLog, downloadLogFile } from '../solver/solverLog';
 import { slotToStartTime, slotToEndTime } from '../solver/constants';
 import { supabase } from '../lib/supabase';
 import type { SolverProgress, SolverResult } from '../solver/types';
 import type { SubjectFull } from '../solver/dataPrep';
+import { EditorView } from './EditorView';
 import toast from 'react-hot-toast';
 
 export function GeneratorView() {
@@ -20,7 +22,7 @@ export function GeneratorView() {
     const [selectedClusterId, setSelectedClusterId] = useState('');
     const [homeRooms, setHomeRooms] = useState<Record<string, string>>({});
     const [assignments, setAssignments] = useState<Record<string, Record<string, string>>>({});
-    const [sectionModes, setSectionModes] = useState<Record<string, 'all' | 'sections'>>({});
+    const [sectionModes, setSectionModes] = useState<Record<string, 'all' | 'sections' | 'itbi'>>({});
 
     // ─── Solver State ─────────────────────────────────────────────────────────
     const [isRunning, setIsRunning] = useState(false);
@@ -31,9 +33,15 @@ export function GeneratorView() {
     const [timetableName, setTimetableName] = useState('');
     const cancelTokenRef = useRef({ cancelled: false });
 
+    // ─── Editor Transition State ──────────────────────────────────────────────
+    const [editorTimetableId, setEditorTimetableId] = useState<string | null>(null);
+    const [savedTimetableId, setSavedTimetableId] = useState<string | null>(null);
+
     // ─── Seed Timetable State ─────────────────────────────────────────────────
     const [seedTimetables, setSeedTimetables] = useState<{ id: string; name: string; semester: number }[]>([]);
     const [seedTimetableId, setSeedTimetableId] = useState<string>('');
+    /** IDs of timetables whose slots should be locked (treated as fixed constraints). */
+    const [lockedTimetableIds, setLockedTimetableIds] = useState<Set<string>>(new Set());
 
     // ─── Data (hook) ─────────────────────────────────────────────────────────
     const {
@@ -52,6 +60,7 @@ export function GeneratorView() {
         setProgress(null);
         setSaved(false);
         setSeedTimetableId('');
+        setLockedTimetableIds(new Set());
     };
 
     // ─── Fetch existing timetables for seed picker ────────────────────────────
@@ -75,13 +84,13 @@ export function GeneratorView() {
     };
 
     const handleApplyToAll = (subjectId: string, profId: string) => {
-        const sectionGroups = clusterGroups.filter(g => g.name !== 'WMC');
+        const sectionGroups = clusterGroups.filter(g => g.name !== 'WMC' && !/IT[\s-]*BI/i.test(g.name));
         const all: Record<string, string> = {};
         sectionGroups.forEach(g => { all[g.id] = profId; });
         setAssignments(prev => ({ ...prev, [subjectId]: all }));
     };
 
-    const handleSectionModeChange = (subjectId: string, mode: 'all' | 'sections') => {
+    const handleSectionModeChange = (subjectId: string, mode: 'all' | 'sections' | 'itbi') => {
         setSectionModes(prev => ({ ...prev, [subjectId]: mode }));
         // Clear assignments for this subject when switching modes
         setAssignments(prev => ({ ...prev, [subjectId]: {} }));
@@ -91,23 +100,27 @@ export function GeneratorView() {
         setHomeRooms(prev => ({ ...prev, [groupId]: roomId }));
     };
 
+    // Helper: detect IT-BI group (robust matching for variations)
+    const isITBIGroup = (name: string) => /IT[\s-]*BI/i.test(name);
+
     // Helper: default section mode per subject (electives → 'all', core → 'sections')
     const getDefaultMode = (sub: { subject_type: string }): 'all' | 'sections' =>
-        sub.subject_type === 'Elective' ? 'all' : 'sections';
+        (sub.subject_type === 'Elective' || sub.subject_type === 'Minor') ? 'all' : 'sections';
 
     // ─── DX: Auto-fill ────────────────────────────────────────────────────────
     const handleAutoFill = useCallback(() => {
         if (professors.length === 0) return;
 
-        const sectionGroups = clusterGroups.filter(g => g.name !== 'WMC');
+        const allGroups = clusterGroups.filter(g => g.name !== 'WMC');
+        const sectionGroups = allGroups.filter(g => !isITBIGroup(g.name));
         const allGroup = clusterGroups.find(g => g.name === 'WMC');
 
         const newHomeRooms: Record<string, string> = {};
         const lectureRooms = rooms.filter(r => r.room_type === 'Lecture');
-        sectionGroups.forEach((g, i) => { newHomeRooms[g.id] = lectureRooms[i % lectureRooms.length]?.id ?? ''; });
+        allGroups.forEach((g, i) => { newHomeRooms[g.id] = lectureRooms[i % lectureRooms.length]?.id ?? ''; });
 
         // Set mode: use existing mode or smart default (electives → WMC)
-        const newModes: Record<string, 'all' | 'sections'> = {};
+        const newModes: Record<string, 'all' | 'sections' | 'itbi'> = {};
         const newAssignments: Record<string, Record<string, string>> = {};
 
         clusterSubjects.forEach((sub, si) => {
@@ -117,7 +130,12 @@ export function GeneratorView() {
             newModes[sub.id] = mode;
             newAssignments[sub.id] = {};
 
-            if (mode === 'all' && allGroup) {
+            const itbiGroup = clusterGroups.find(g => isITBIGroup(g.name));
+
+            if (mode === 'itbi' && itbiGroup) {
+                // Only assign to IT-BI group
+                newAssignments[sub.id][itbiGroup.id] = resolved[si % resolved.length].id;
+            } else if (mode === 'all' && allGroup) {
                 // Only assign to the "All" group
                 newAssignments[sub.id][allGroup.id] = resolved[si % resolved.length].id;
             } else {
@@ -131,14 +149,14 @@ export function GeneratorView() {
         setHomeRooms(newHomeRooms);
         setSectionModes(newModes);
         setAssignments(newAssignments);
-    }, [professors, expertiseMap, clusterGroups, rooms, clusterSubjects]);
+    }, [professors, expertiseMap, clusterGroups, rooms, clusterSubjects, sectionModes]);
 
     // ─── Generate Timetable Handler ───────────────────────────────────────────
     const handleGenerate = useCallback(async () => {
-        // Prepare solver input
         const solverInput = prepareSolverInput(
             clusterSubjects as SubjectFull[],
             clusterGroups,
+            professors,
             rooms,
             assignments,
             homeRooms,
@@ -156,9 +174,54 @@ export function GeneratorView() {
         setSaved(false);
         cancelTokenRef.current = { cancelled: false };
 
-        toast(`Scheduling ${solverInput.sessions.length} sessions…`, { icon: '🧬' });
+        const normalSessionCount = solverInput.sessions.length;
 
         try {
+            // ── Fetch selected locked timetable slots ──
+            let lockedGenes: import('../solver/types').Gene[] = [];
+
+            if (lockedTimetableIds.size > 0) {
+                const { data: publishedRaw, error: pubErr } = await supabase
+                    .from('timetable_slots')
+                    .select(`
+                        subject_id, student_group_id, professor_id, room_id,
+                        day_of_week, start_time, end_time, slot_type,
+                        subject:subject_id (code, subject_type),
+                        student_group:student_group_id (name)
+                    `)
+                    .in('timetable_id', [...lockedTimetableIds]);
+                if (pubErr) {
+                    toast('Could not load locked timetables — generating without constraints', { icon: '⚠️' });
+                } else if (publishedRaw && publishedRaw.length > 0) {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const publishedSlots: PublishedSlotRow[] = (publishedRaw as any[]).map(r => ({
+                        subject_id: r.subject_id,
+                        student_group_id: r.student_group_id,
+                        professor_id: r.professor_id,
+                        room_id: r.room_id,
+                        day_of_week: r.day_of_week,
+                        start_time: r.start_time,
+                        end_time: r.end_time,
+                        slot_type: r.slot_type,
+                        subject_code: r.subject?.code ?? '??',
+                        subject_type: r.subject?.subject_type ?? 'Core',
+                        group_name: r.student_group?.name ?? '??',
+                    }));
+
+                    const locked = buildLockedSessions(
+                        publishedSlots,
+                        solverInput.rooms,
+                        normalSessionCount,
+                    );
+
+                    solverInput.sessions = [...solverInput.sessions, ...locked.sessions];
+                    lockedGenes = locked.genes;
+                    toast(`Locking ${locked.sessions.length} slots from ${lockedTimetableIds.size} timetable(s)`, { icon: '🔒' });
+                }
+            }
+
+            toast(`Scheduling ${normalSessionCount} sessions…`, { icon: '🧬' });
+
             // Build seed solution if a seed timetable is selected
             let seedSolution = undefined;
             if (seedTimetableId) {
@@ -178,11 +241,15 @@ export function GeneratorView() {
                 }
             }
 
+            // ── Pin locked genes into seed/initial solution ──
+            // The solver's generateInitialSolution() puts placeholders for locked sessions.
+            // We need to overwrite those with the correct fixed positions.
             const result = await runSolver(
                 solverInput,
                 (p) => setProgress(p),
                 cancelTokenRef.current,
                 seedSolution,
+                lockedGenes,
             );
             setSolverResult(result);
             // Set default name based on cluster
@@ -195,12 +262,20 @@ export function GeneratorView() {
             } else {
                 toast(`Best effort: ${result.fitness.hardViolations} conflicts remain`, { icon: '⚠️' });
             }
+
+            // ── Auto-download solver log ──
+            const logClusterName = cluster
+                ? `${cluster.department} Sem-${cluster.semester_number} (${cluster.batch_year})`
+                : 'Unknown Cluster';
+            const logContent = generateSolverLog(solverInput, result, logClusterName);
+            const logTs = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            downloadLogFile(logContent, `solver-log_${logTs}.txt`);
         } catch (err) {
             toast.error(`Solver error: ${err instanceof Error ? err.message : 'Unknown'}`);
         } finally {
             setIsRunning(false);
         }
-    }, [clusterSubjects, clusterGroups, rooms, assignments, homeRooms, seedTimetableId, clusters, selectedClusterId]);
+    }, [clusterSubjects, clusterGroups, rooms, assignments, homeRooms, seedTimetableId, clusters, selectedClusterId, lockedTimetableIds, professors]);
 
     // ─── Cancel Solver ────────────────────────────────────────────────────────
     const handleCancel = useCallback(() => {
@@ -234,30 +309,36 @@ export function GeneratorView() {
             const solverInput = prepareSolverInput(
                 clusterSubjects as SubjectFull[],
                 clusterGroups,
+                professors,
                 rooms,
                 assignments,
                 homeRooms,
             );
 
-            // Build timetable_slots rows
-            const slots = solverResult.solution.map((gene, i) => {
-                const session = solverInput.sessions[i];
-                const room = solverInput.rooms[gene.roomIndex];
-                const startTime = slotToStartTime(gene.startBucket);
-                const endTime = slotToEndTime(gene.startBucket + session.duration - 1);
+            // Build timetable_slots rows — ONLY from normal (non-locked) sessions.
+            // solverResult.solution may include extra locked genes from published timetables,
+            // but the fresh solverInput only contains normal sessions.
+            const normalCount = solverInput.sessions.length;
+            const slots = solverResult.solution
+                .slice(0, normalCount)
+                .map((gene, i) => ({ gene, session: solverInput.sessions[i] }))
+                .map(({ gene, session }) => {
+                    const room = solverInput.rooms[gene.roomIndex];
+                    const startTime = slotToStartTime(gene.startBucket);
+                    const endTime = slotToEndTime(gene.startBucket + session.duration - 1);
 
-                return {
-                    timetable_id: timetable.id,
-                    subject_id: session.subjectId,
-                    professor_id: session.professorId,
-                    room_id: room?.id ?? null,
-                    student_group_id: session.groupId,
-                    day_of_week: gene.day,
-                    start_time: startTime,
-                    end_time: endTime,
-                    slot_type: session.slotType,
-                };
-            });
+                    return {
+                        timetable_id: timetable.id,
+                        subject_id: session.subjectId,
+                        professor_id: session.professorId || null,
+                        room_id: room?.id ?? null,
+                        student_group_id: session.groupId,
+                        day_of_week: gene.day,
+                        start_time: startTime,
+                        end_time: endTime,
+                        slot_type: session.slotType,
+                    };
+                });
 
             const { error: slotErr } = await supabase
                 .from('timetable_slots')
@@ -266,25 +347,29 @@ export function GeneratorView() {
             if (slotErr) throw slotErr;
 
             setSaved(true);
+            setSavedTimetableId(timetable.id);
             toast.success(`Saved ${slots.length} slots to timetable "${timetable.id}"!`);
         } catch (err) {
             toast.error(`Save failed: ${err instanceof Error ? err.message : 'Unknown'}`);
         } finally {
             setSaving(false);
         }
-    }, [solverResult, clusters, selectedClusterId, clusterSubjects, clusterGroups, rooms, assignments, homeRooms, timetableName]);
+    }, [solverResult, clusters, selectedClusterId, clusterSubjects, clusterGroups, rooms, assignments, homeRooms, timetableName, professors]);
 
     // ─── Derived ──────────────────────────────────────────────────────────────
     const roomableGroups = clusterGroups.filter(g => g.name !== 'WMC');
     const allGroup = clusterGroups.find(g => g.name === 'WMC');
-    const sectionGroups = roomableGroups;
+    const sectionGroups = roomableGroups.filter(g => !isITBIGroup(g.name));
 
     // Count based on each subject's section mode
     let totalCells = 0;
     let filledCells = 0;
     clusterSubjects.forEach(sub => {
         const mode = sectionModes[sub.id] ?? getDefaultMode(sub);
-        const relevantGroups = mode === 'all' && allGroup ? [allGroup] : sectionGroups;
+        const itbiGroup = clusterGroups.find(g => isITBIGroup(g.name));
+        const relevantGroups = mode === 'all' && allGroup ? [allGroup]
+            : mode === 'itbi' && itbiGroup ? [itbiGroup]
+                : sectionGroups;
         totalCells += relevantGroups.length;
         relevantGroups.forEach(g => {
             if (assignments[sub.id]?.[g.id]) filledCells++;
@@ -295,6 +380,16 @@ export function GeneratorView() {
         totalCells > 0 &&
         filledCells === totalCells &&
         roomableGroups.every(g => homeRooms[g.id]);
+
+    // ─── If editor is active, render EditorView ──────────────────────────────
+    if (editorTimetableId) {
+        return (
+            <EditorView
+                initialTimetableId={editorTimetableId}
+                onBack={() => setEditorTimetableId(null)}
+            />
+        );
+    }
 
     // ─── Render ───────────────────────────────────────────────────────────────
     if (loading) {
@@ -356,6 +451,54 @@ export function GeneratorView() {
                         </div>
                     )}
 
+                    {/* Lock Timetable Picker */}
+                    {seedTimetables.length > 0 && (
+                        <details className="relative" onClick={(e) => e.stopPropagation()}>
+                            <summary
+                                className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium cursor-pointer list-none select-none transition ${lockedTimetableIds.size > 0
+                                    ? 'bg-orange-50 border-orange-300 text-orange-800'
+                                    : 'bg-gray-50 border-gray-300 text-gray-600 hover:bg-gray-100'
+                                    }`}
+                            >
+                                <Lock className="w-4 h-4" />
+                                {lockedTimetableIds.size > 0
+                                    ? `${lockedTimetableIds.size} Locked`
+                                    : 'Lock TTs'}
+                            </summary>
+                            <div className="absolute right-0 top-10 z-50 bg-white border border-gray-200 rounded-xl shadow-lg p-3 min-w-[240px] max-h-64 overflow-y-auto">
+                                <p className="text-xs text-gray-500 mb-2 font-medium">Select timetables to lock as constraints:</p>
+                                {seedTimetables.map(t => (
+                                    <label key={t.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            disabled={isRunning}
+                                            checked={lockedTimetableIds.has(t.id)}
+                                            onChange={() => {
+                                                setLockedTimetableIds(prev => {
+                                                    const next = new Set(prev);
+                                                    if (next.has(t.id)) next.delete(t.id);
+                                                    else next.add(t.id);
+                                                    return next;
+                                                });
+                                            }}
+                                            className="accent-orange-500"
+                                        />
+                                        <span className="text-sm text-gray-700 truncate">{t.name}</span>
+                                        <span className="ml-auto text-xs text-gray-400">Sem {t.semester}</span>
+                                    </label>
+                                ))}
+                                {lockedTimetableIds.size > 0 && (
+                                    <button
+                                        onClick={() => setLockedTimetableIds(new Set())}
+                                        className="mt-2 w-full text-xs text-red-500 hover:text-red-700 text-center py-1"
+                                    >
+                                        Clear all
+                                    </button>
+                                )}
+                            </div>
+                        </details>
+                    )}
+
                     <button
                         onClick={handleGenerate}
                         disabled={!isConfigComplete || isRunning}
@@ -388,6 +531,7 @@ export function GeneratorView() {
                         prepareSolverInput(
                             clusterSubjects as SubjectFull[],
                             clusterGroups,
+                            professors,
                             rooms,
                             assignments,
                             homeRooms,
@@ -396,6 +540,7 @@ export function GeneratorView() {
                     timetableName={timetableName}
                     onNameChange={setTimetableName}
                     onSave={handleSave}
+                    onEdit={savedTimetableId ? () => setEditorTimetableId(savedTimetableId) : undefined}
                     saving={saving}
                     saved={saved}
                 />

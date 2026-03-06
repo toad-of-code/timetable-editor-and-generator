@@ -57,6 +57,7 @@ interface Props {
 
 const normalizeIgnore = (str: string) => str.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const sanitize = (val: any) => {
   if (val === null || val === undefined) return '';
   return String(val).replace(/С/g, 'C').replace(/–/g, '-').replace(/\s+/g, ' ').trim();
@@ -83,6 +84,7 @@ const addTwoHours = (timeStr: string) => {
   return `${h + 2}:${m.toString().padStart(2, '0')}`;
 };
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const formatExcelTime = (val: any): string => {
   const sVal = String(val).trim();
   if (!sVal) return '';
@@ -206,6 +208,7 @@ const EditableRow: React.FC<EditableRowProps> = ({ slot, onChange, onDelete }) =
       <td className={td}>
         <select
           value={slot.isMinor ? 'Minor' : slot.isElective ? 'Elective' : 'Core'}
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           onChange={e => onChange(slot.id, 'subjectTypeGroup' as any, e.target.value)}
           className={`${inp} ${slot.isMinor ? 'text-orange-700 font-semibold'
             : slot.isElective ? 'text-purple-700 font-semibold' : ''
@@ -291,10 +294,12 @@ const TimetableImporter: React.FC<Props> = ({ onNavigate }) => {
         const bstr = event.target?.result;
         const workbook = XLSX.read(bstr, { type: 'binary' });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }) as any[][];
 
         await processExcelData(rows, sheet);
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } catch (err: any) {
         addLog(`❌ Error: ${err.message}`);
       } finally {
@@ -305,6 +310,7 @@ const TimetableImporter: React.FC<Props> = ({ onNavigate }) => {
   };
 
   // ---- PARSE EXCEL ----
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const processExcelData = async (rows: any[][], sheet: any) => {
     addLog(`🔍 Processing ${rows.length} rows...`);
 
@@ -331,6 +337,7 @@ const TimetableImporter: React.FC<Props> = ({ onNavigate }) => {
     let foundTimes = 0;
 
     addLog(`🔎 Inspecting Row 2 for times...`);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     headerRow.forEach((cell: any, cIdx: number) => {
       const t = formatExcelTime(cell);
       const match = t.match(/(\d{1,2}[:.]?\d{2})\s*[-to]+\s*(\d{1,2}[:.]?\d{2})/i);
@@ -359,9 +366,11 @@ const TimetableImporter: React.FC<Props> = ({ onNavigate }) => {
     let facultyColIdx = 3;
 
     rows.forEach((row, idx) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const rowStr = row.map((c: any) => String(c).toLowerCase()).join(' ');
       if (rowStr.includes('course code') && rowStr.includes('faculties')) {
         metadataStartRow = idx;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         row.forEach((cell: any, cIdx: number) => {
           const cStr = String(cell).toLowerCase().replace(/[\s()]/g, '');
           if (cStr.includes('coursecode')) codeColIdx = cIdx;
@@ -393,6 +402,7 @@ const TimetableImporter: React.FC<Props> = ({ onNavigate }) => {
             subjectLtpsMap[code] = { L, T, P, S };
           }
 
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const profs: any = { default: 'Unknown' };
           const parsedList: string[] = [];
 
@@ -500,12 +510,14 @@ const TimetableImporter: React.FC<Props> = ({ onNavigate }) => {
             const result = parseSlotHeuristically(cleanLine);
 
             if (!result.skipped && result.subject) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const { subject, type, section, room } = result as any;
               const profMap = facultyMap[subject] || { default: 'Unknown' };
               const shortGroup = section.replace('Sec ', '').trim();
               const specificProf = profMap[section] || profMap[shortGroup] || profMap.default;
 
               let finalEnd = timeRange.end;
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const mergeRange = merges.find((m: any) => m.s.r === r && m.s.c === c);
               if (mergeRange) {
                 const endColIdx = mergeRange.e.c;
@@ -538,6 +550,7 @@ const TimetableImporter: React.FC<Props> = ({ onNavigate }) => {
                   rowNum: r + 1,
                   rawText: cleanLine,
                   status: 'Failed',
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   reason: (result as any).reason || 'Heuristic skipped'
                 });
               }
@@ -570,6 +583,7 @@ const TimetableImporter: React.FC<Props> = ({ onNavigate }) => {
       prev.map(s => {
         if (s.id !== id) return s;
         // subjectTypeGroup sets both boolean flags together
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         if (field === 'subjectTypeGroup' as any) {
           return { ...s, isElective: value === 'Elective', isMinor: value === 'Minor' };
         }
@@ -714,7 +728,9 @@ const TimetableImporter: React.FC<Props> = ({ onNavigate }) => {
         .select('id, name')
         .eq('semester', safeSemester);
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const findId = (list: any[], key: string, val: string) =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         list?.find((item: any) => item[key]?.toLowerCase() === val?.toLowerCase())?.id;
       const unknownProfId = findId(dbProfs || [], 'name', 'Unknown');
 
@@ -801,19 +817,35 @@ const TimetableImporter: React.FC<Props> = ({ onNavigate }) => {
       if (clusterId && dbSubjects && dbSubjects.length > 0) {
         addLog('📋 Syncing cluster requirements...');
 
+        // Build a map: subjectCode → elective_basket (from parsedSlots)
+        const subjectBasketMap = new Map<string, string | null>();
+        for (const slot of parsedSlots) {
+          if (!subjectBasketMap.has(slot.subjectCode)) {
+            subjectBasketMap.set(slot.subjectCode, slot.electiveGroup ?? null);
+          }
+        }
+
         // Remove old requirements for this cluster then re-insert fresh
         await supabase.from('cluster_requirements').delete().eq('cluster_id', clusterId);
 
-        const subjectIdsForCluster = uniqueSubjects
-          .map(code => findId(dbSubjects, 'code', code))
+        // Deduplicate subject codes from parsed slots
+        const uniqueCodes = [...new Set(parsedSlots.map(s => s.subjectCode))];
+        const crRows = uniqueCodes
+          .map(code => {
+            const sid = findId(dbSubjects, 'code', code);
+            if (!sid) return null;
+            return {
+              cluster_id: clusterId!,
+              subject_id: sid,
+              elective_basket: subjectBasketMap.get(code) ?? null,
+            };
+          })
           .filter(Boolean);
 
-        if (subjectIdsForCluster.length > 0) {
-          const { error: crErr } = await supabase.from('cluster_requirements').insert(
-            subjectIdsForCluster.map(sid => ({ cluster_id: clusterId, subject_id: sid }))
-          );
+        if (crRows.length > 0) {
+          const { error: crErr } = await supabase.from('cluster_requirements').insert(crRows);
           if (crErr) throw new Error(`Cluster Requirements Error: ${crErr.message}`);
-          addLog(`✅ Linked ${subjectIdsForCluster.length} subjects to cluster.`);
+          addLog(`✅ Linked ${crRows.length} subjects to cluster (with basket info).`);
         }
       }
 
@@ -853,6 +885,7 @@ const TimetableImporter: React.FC<Props> = ({ onNavigate }) => {
         setTimeout(() => onNavigate('view-timetable', ttData.id), 1000);
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       addLog(`❌ Failed: ${err.message}`);
       console.error(err);
@@ -1072,11 +1105,25 @@ const TimetableImporter: React.FC<Props> = ({ onNavigate }) => {
             const subjects = [...new Set(parsedSlots.map(s => s.subjectCode).filter(Boolean))].sort();
             if (subjects.length === 0) return null;
 
-            // Helper: count unique (day|section) combos for a given type
-            const uniqCount = (slots: ParsedSlot[], type: string) => {
-              const seen = new Set<string>();
-              slots.filter(s => s.type === type).forEach(s => seen.add(`${s.day}|${s.section}`));
-              return seen.size;
+            // Helper: count slots of a given type PER SECTION, return the
+            // representative count (from the section with the most).
+            // LTP values from Excel are per-section, not total across sections.
+            const perSectionCount = (slots: ParsedSlot[], type: string) => {
+              const sectionCounts = new Map<string, number>();
+              for (const s of slots) {
+                if (s.type !== type) continue;
+                sectionCounts.set(s.section, (sectionCounts.get(s.section) ?? 0) + 1);
+              }
+              if (sectionCounts.size === 0) return 0;
+              // Return the max count across sections (most representative)
+              return Math.max(...sectionCounts.values());
+            };
+
+            // Count how many distinct sections this subject has
+            const sectionCount = (slots: ParsedSlot[]) => {
+              const secs = new Set<string>();
+              for (const s of slots) secs.add(s.section);
+              return secs.size;
             };
 
             type CellStatus = 'ok' | 'bad' | 'noref';
@@ -1085,16 +1132,17 @@ const TimetableImporter: React.FC<Props> = ({ onNavigate }) => {
 
             const tableRows = subjects.map(code => {
               const slots = parsedSlots.filter(s => s.subjectCode === code);
-              const parsedL = uniqCount(slots, 'Lecture');
-              const parsedT = uniqCount(slots, 'Tutorial');
-              const parsedP = uniqCount(slots, 'Practical');
+              const parsedL = perSectionCount(slots, 'Lecture');
+              const parsedT = perSectionCount(slots, 'Tutorial');
+              const parsedP = perSectionCount(slots, 'Practical');
+              const sections = sectionCount(slots);
               const excelLtps = ltpsMap[code];
               const allOk = !excelLtps || (
                 parsedL === excelLtps.L &&
                 parsedT === excelLtps.T &&
                 parsedP === excelLtps.P
               );
-              return { code, name: subjectMap[code] || code, parsedL, parsedT, parsedP, excelLtps, allOk };
+              return { code, name: subjectMap[code] || code, parsedL, parsedT, parsedP, sections, excelLtps, allOk };
             });
 
             const anyBad = tableRows.some(r => !r.allOk);
@@ -1133,6 +1181,7 @@ const TimetableImporter: React.FC<Props> = ({ onNavigate }) => {
                       <tr>
                         <th className="px-3 py-1.5 font-semibold">Code</th>
                         <th className="px-3 py-1.5 font-semibold">Course Name</th>
+                        <th className="px-3 py-1.5 font-semibold text-center">Secs</th>
                         <th className="px-3 py-1.5 font-semibold text-center">Excel L-T-P-S</th>
                         <th className="px-3 py-1.5 font-semibold text-blue-700 text-center">L (parsed)</th>
                         <th className="px-3 py-1.5 font-semibold text-purple-700 text-center">T (parsed)</th>
@@ -1145,6 +1194,7 @@ const TimetableImporter: React.FC<Props> = ({ onNavigate }) => {
                         <tr key={r.code} className={r.allOk ? 'hover:bg-gray-50' : 'bg-red-50 hover:bg-red-100'}>
                           <td className="px-3 py-1 font-mono font-bold text-gray-700">{r.code}</td>
                           <td className="px-3 py-1 text-gray-600 max-w-[200px] truncate" title={r.name}>{r.name}</td>
+                          <td className="px-3 py-1 text-center text-gray-500 font-mono">{r.sections}</td>
                           <td className="px-3 py-1 text-center font-mono text-gray-500">
                             {r.excelLtps
                               ? `${r.excelLtps.L}-${r.excelLtps.T}-${r.excelLtps.P}-${r.excelLtps.S}`

@@ -1,4 +1,4 @@
-import { CheckCircle2, AlertTriangle, Clock, Zap, Save, Loader2 } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Clock, Zap, Save, Loader2, Pencil } from 'lucide-react';
 import type { SolverResult } from '../../solver/types';
 
 interface Props {
@@ -7,11 +7,12 @@ interface Props {
     timetableName: string;
     onNameChange: (name: string) => void;
     onSave: () => void;
+    onEdit?: () => void;
     saving: boolean;
     saved: boolean;
 }
 
-export function SolverResults({ result, sessionCount, timetableName, onNameChange, onSave, saving, saved }: Props) {
+export function SolverResults({ result, sessionCount, timetableName, onNameChange, onSave, onEdit, saving, saved }: Props) {
     const feasible = result.fitness.hardViolations === 0;
     const elapsed = (result.elapsedMs / 1000).toFixed(1);
 
@@ -78,22 +79,33 @@ export function SolverResults({ result, sessionCount, timetableName, onNameChang
                 />
             </div>
 
-            {/* Save button */}
-            <button
-                onClick={onSave}
-                disabled={saving || saved || !timetableName.trim()}
-                className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition shadow-sm ${saved
-                    ? 'bg-green-600 text-white cursor-default'
-                    : 'bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50'
-                    }`}
-            >
-                {saving
-                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving…</>
-                    : saved
-                        ? <><CheckCircle2 className="w-4 h-4" /> Saved to Supabase</>
-                        : <><Save className="w-4 h-4" /> Save Timetable to Supabase</>
-                }
-            </button>
+            {/* Save & Edit buttons — side by side */}
+            <div className="flex items-center gap-3">
+                <button
+                    onClick={onSave}
+                    disabled={saving || saved || !timetableName.trim()}
+                    className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition shadow-sm ${saved
+                        ? 'bg-green-600 text-white cursor-default'
+                        : 'bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50'
+                        }`}
+                >
+                    {saving
+                        ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving…</>
+                        : saved
+                            ? <><CheckCircle2 className="w-4 h-4" /> Saved to Supabase</>
+                            : <><Save className="w-4 h-4" /> Save Timetable to Supabase</>
+                    }
+                </button>
+
+                {saved && onEdit && (
+                    <button
+                        onClick={onEdit}
+                        className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold bg-purple-600 text-white hover:bg-purple-700 transition shadow-sm"
+                    >
+                        <Pencil className="w-4 h-4" /> Edit Timetable →
+                    </button>
+                )}
+            </div>
         </div>
     );
 }

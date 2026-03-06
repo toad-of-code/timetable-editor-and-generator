@@ -54,6 +54,7 @@ export function MasterRoomViewer({ onBack }: MasterRoomViewerProps) {
   const pdfRef = useRef<HTMLDivElement>(null);
 
   // --- Helper: Extract Value ---
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const extractVal = (data: any, key: string) => {
     if (!data) return 'N/A';
     if (Array.isArray(data)) return data.length > 0 ? data[0][key] : 'N/A';
@@ -79,7 +80,7 @@ export function MasterRoomViewer({ onBack }: MasterRoomViewerProps) {
     try {
       // Always fetch ALL rooms from the master rooms table for the building filter
       const { data: roomData } = await supabase.from('rooms').select('name').order('name');
-      const roomNames = (roomData || []).map((r: any) => r.name as string);
+      const roomNames = (roomData || []).map((r: { name: string }) => r.name);
       const buildings = Array.from(new Set(roomNames.map(r => getBuildingName(r)))).sort();
       setAvailableBuildings(buildings);
 
@@ -102,6 +103,7 @@ export function MasterRoomViewer({ onBack }: MasterRoomViewerProps) {
 
       if (error) throw error;
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const rawData = data as any[];
       const cleanSlots: FetchedSlot[] = rawData
         .filter(s => s.rooms?.name)
@@ -163,7 +165,7 @@ export function MasterRoomViewer({ onBack }: MasterRoomViewerProps) {
       return true;
     });
 
-    let cols: TimeColumn[] = [];
+    const cols: TimeColumn[] = [];
     for (let i = 0; i < cleanTimes.length - 1; i++) {
       const start = cleanTimes[i];
       const end = cleanTimes[i + 1];
@@ -228,7 +230,7 @@ export function MasterRoomViewer({ onBack }: MasterRoomViewerProps) {
     const colStart = parseInt(column.start.replace(':', ''));
     const colEnd = parseInt(column.end.replace(':', ''));
 
-    let cellSlots = processedSlots.filter(s => {
+    const cellSlots = processedSlots.filter(s => {
       if (s.day_of_week !== dayIndex + 1) return false;
       const slotStart = parseInt(s.start_time.replace(':', ''));
       const slotEnd = parseInt(s.end_time.replace(':', ''));

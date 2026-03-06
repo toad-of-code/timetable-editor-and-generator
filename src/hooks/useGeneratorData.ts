@@ -21,6 +21,8 @@ export interface Subject {
     tutorials: number;
     practicals: number;
     practical_duration: number;
+    /** Elective basket name from cluster_requirements (null for core subjects). */
+    elective_basket: string | null;
 }
 
 export interface Group {
@@ -45,6 +47,7 @@ export interface Professor {
 // ─── Typed Supabase response shapes (replaces `as unknown as X` casts) ────────
 
 interface SubjectRow {
+    elective_basket: string | null;
     subject: Subject | null;
 }
 
@@ -133,7 +136,7 @@ export function useGeneratorData(selectedClusterId: string): GeneratorData {
                 const [reqRes, groupRes, expertiseRes] = await Promise.all([
                     supabase
                         .from('cluster_requirements')
-                        .select('subject:subject_id (id, code, name, credits, subject_type, lectures, tutorials, practicals, practical_duration)')
+                        .select('elective_basket, subject:subject_id (id, code, name, credits, subject_type, lectures, tutorials, practicals, practical_duration)')
                         .eq('cluster_id', selectedClusterId),
                     supabase
                         .from('student_groups')
@@ -149,9 +152,9 @@ export function useGeneratorData(selectedClusterId: string): GeneratorData {
                 if (groupRes.error) throw groupRes.error;
                 if (expertiseRes.error) throw expertiseRes.error;
 
-                // Type-safe extraction
+                // Type-safe extraction — merge elective_basket from the row into the subject object
                 const subjects = (reqRes.data as unknown as SubjectRow[])
-                    .map(row => row.subject)
+                    .map(row => row.subject ? { ...row.subject, elective_basket: row.elective_basket ?? null } : null)
                     .filter((s): s is Subject => s !== null);
 
                 setClusterSubjects(subjects);

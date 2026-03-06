@@ -11,6 +11,8 @@ export interface SubjectFull extends Subject {
     tutorials: number;
     practicals: number;
     practical_duration: number;
+    /** Elective basket name this subject belongs to (e.g. 'basket-1', 'HSMC', 'lang'). Null for core subjects. */
+    elective_basket: string | null;
 }
 
 /**
@@ -25,6 +27,7 @@ export interface SubjectFull extends Subject {
 export function prepareSolverInput(
     subjects: SubjectFull[],
     groups: Group[],
+    professors: { id: string; name: string }[],
     rooms: Room[],
     assignments: Record<string, Record<string, string>>,
     homeRooms: Record<string, string>,
@@ -39,12 +42,22 @@ export function prepareSolverInput(
     // Track elective occurrence indices per slotType for synchronization
     // All elective subjects' Lecture#0 get electiveSlotIndex=0, Lecture#1 get =1, etc.
 
+    // Map professor IDs to names for overlap skipping
+    const profNameMap = new Map<string, string>();
+    professors.forEach(p => profNameMap.set(p.id, p.name));
+
     for (const subject of subjects) {
-        const isElective = subject.subject_type === 'Elective';
+        const isElective = subject.subject_type === 'Elective' || subject.subject_type === 'Minor';
 
         for (const group of groups) {
-            const professorId = assignments[subject.id]?.[group.id];
+            let professorId = assignments[subject.id]?.[group.id];
             if (!professorId) continue; // Skip unassigned
+
+            // If professor is Unknown/TBD, wipe the ID so the solver doesn't try to sync them as one person
+            const profName = profNameMap.get(professorId) || '';
+            if (profName === 'Unknown' || profName === 'TBD') {
+                professorId = '';
+            }
 
             const homeRoomId = homeRooms[group.id] ?? '';
             const homeRoomIndex = roomIndexMap.get(homeRoomId) ?? 0;
@@ -62,7 +75,8 @@ export function prepareSolverInput(
                     homeRoomIndex,
                     isElective,
                     electiveSlotIndex: isElective ? l : -1,
-                    isWMCGroup: group.name === 'WMC',
+                    basketName: isElective ? (subject.elective_basket ?? null) : null,
+                    isWMCGroup: group.name === 'WMC' || /IT[\s-]*BI/i.test(group.name),
                 });
             }
 
@@ -79,7 +93,8 @@ export function prepareSolverInput(
                     homeRoomIndex,
                     isElective,
                     electiveSlotIndex: isElective ? t : -1,
-                    isWMCGroup: group.name === 'WMC',
+                    basketName: isElective ? (subject.elective_basket ?? null) : null,
+                    isWMCGroup: group.name === 'WMC' || /IT[\s-]*BI/i.test(group.name),
                 });
             }
 
@@ -101,7 +116,8 @@ export function prepareSolverInput(
                     homeRoomIndex,
                     isElective,
                     electiveSlotIndex: isElective ? p : -1,
-                    isWMCGroup: group.name === 'WMC',
+                    basketName: isElective ? (subject.elective_basket ?? null) : null,
+                    isWMCGroup: group.name === 'WMC' || /IT[\s-]*BI/i.test(group.name),
                 });
             }
         }
@@ -184,4 +200,86 @@ export function buildSeedSolution(
     });
 
     return solution;
+}
+
+// ─── Locked Sessions from Published Timetables ─────────────────────────────────
+
+/**
+ * A published timetable slot row with extra subject info for building sessions.
+ */
+export interface PublishedSlotRow {
+    subject_id: string;
+    student_group_id: string;
+    professor_id: string | null;
+    room_id: string | null;
+    day_of_week: number;
+    start_time: string;       // "09:50"
+    end_time: string;         // "10:50"
+    slot_type: string;        // "Lecture" | "Tutorial" | "Practical"
+    subject_code: string;
+    subject_type: string;     // "Core" | "Elective" | "Minor"
+    group_name: string;
+}
+
+export interface LockedSessionResult {
+    /** Locked ClassSession entries (isLocked=true) to append to SolverInput.sessions */
+    sessions: ClassSession[];
+    /** Corresponding fixed Gene positions (same index as sessions) */
+    genes: Gene[];
+}
+
+/**
+ * Build locked sessions + fixed genes from published timetable slots.
+ *
+ * These represent the "background" constraints from already-published
+ * timetables. The solver will include them in constraint evaluation
+ * (room/professor overlaps) but will never mutate them.
+ *
+ * @param publishedSlots  All slots from published timetables (other semesters)
+ * @param rooms           Room list (same as solver's rooms array)
+ * @param startId         Starting session id (should be after the normal sessions)
+ */
+export function buildLockedSessions(
+    publishedSlots: PublishedSlotRow[],
+    rooms: { id: string; name: string; roomType: string }[],
+    startId: number,
+): LockedSessionResult {
+    const roomIdToIndex = new Map<string, number>();
+    rooms.forEach((r, i) => roomIdToIndex.set(r.id, i));
+
+    const sessions: ClassSession[] = [];
+    const genes: Gene[] = [];
+
+    for (const slot of publishedSlots) {
+        const startBucket = timeToSlot(slot.start_time);
+        const endBucket = timeToSlot(slot.end_time);
+        // Duration: difference in bucket numbers (at least 1)
+        const duration = Math.max(1, endBucket - startBucket + 1);
+        const roomIndex = slot.room_id ? (roomIdToIndex.get(slot.room_id) ?? 0) : 0;
+        const isElective = slot.subject_type === 'Elective' || slot.subject_type === 'Minor';
+
+        sessions.push({
+            id: startId + sessions.length,
+            subjectId: slot.subject_id,
+            subjectCode: slot.subject_code,
+            groupId: slot.student_group_id,
+            professorId: slot.professor_id ?? '',
+            duration,
+            slotType: slot.slot_type as 'Lecture' | 'Tutorial' | 'Practical',
+            homeRoomIndex: roomIndex,
+            isElective,
+            electiveSlotIndex: -1,
+            basketName: null, // locked sessions don't participate in basket constraints
+            isWMCGroup: slot.group_name === 'WMC' || /IT[\s-]*BI/i.test(slot.group_name ?? ''),
+            isLocked: true,
+        });
+
+        genes.push({
+            day: slot.day_of_week,
+            startBucket,
+            roomIndex,
+        });
+    }
+
+    return { sessions, genes };
 }

@@ -7,8 +7,8 @@ import { ProfessorTimetableViewer } from './components/ProfessorTimetableViewer'
 import { RoomTimetableViewer } from './components/RoomTimetableViewer';
 import { MasterRoomViewer } from './components/MasterRoomViewer';
 import { FreeRoomViewer } from './components/FreeRoomViewer';
-import { StudentCustomTimetable } from './components/StudentCustomTimetable';
 import { GeneratorView } from './components/GeneratorView';
+import { EditorView } from './components/EditorView';
 import { ReportCardView } from './components/ReportCardView';
 import { Toaster } from 'react-hot-toast';
 
@@ -19,17 +19,17 @@ import {
   MapPin,
   LayoutGrid,
   Coffee,
-  Sparkles,
   Zap,
   LogOut,
   ClipboardList,
   ChevronLeft,
   ChevronRight,
   CalendarDays,
+  Pencil,
 } from 'lucide-react';
 import { supabase } from './lib/supabase';
 
-type ViewType = 'import' | 'student' | 'my-timetable' | 'prof' | 'room' | 'master-room' | 'free-room' | 'generator' | 'report-card';
+type ViewType = 'import' | 'student' | 'prof' | 'room' | 'master-room' | 'free-room' | 'generator' | 'editor' | 'report-card';
 
 interface NavItem {
   id: ViewType;
@@ -40,7 +40,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { id: 'import', label: 'Import', icon: <FileSpreadsheet size={20} /> },
   { id: 'generator', label: 'Generator', icon: <Zap size={20} /> },
-  { id: 'my-timetable', label: 'My Timetable', icon: <Sparkles size={20} /> },
+  { id: 'editor', label: 'Editor', icon: <Pencil size={20} /> },
   { id: 'student', label: 'All Students', icon: <Users size={20} /> },
   { id: 'prof', label: 'Professors', icon: <User size={20} /> },
   { id: 'room', label: 'Rooms', icon: <MapPin size={20} /> },
@@ -135,7 +135,7 @@ function AppContent() {
         <main className="flex-1 p-6 md:p-8">
           {view === 'import' && <TimetableImporter />}
           {view === 'generator' && <GeneratorView />}
-          {view === 'my-timetable' && <StudentCustomTimetable onBack={() => setView('student')} />}
+          {view === 'editor' && <EditorView />}
           {view === 'student' && <TimetableViewer />}
           {view === 'prof' && <ProfessorTimetableViewer />}
           {view === 'room' && <RoomTimetableViewer />}
@@ -169,8 +169,8 @@ function SidebarButton({
       onClick={onClick}
       title={collapsed ? label : undefined}
       className={`flex items-center gap-3 w-full px-2 py-2.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap overflow-hidden ${active
-          ? 'bg-indigo-50 text-indigo-700'
-          : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'
+        ? 'bg-indigo-50 text-indigo-700'
+        : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'
         } ${collapsed ? 'justify-center' : ''}`}
     >
       <span className="flex-shrink-0">{icon}</span>

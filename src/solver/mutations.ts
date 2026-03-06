@@ -90,8 +90,9 @@ function pickRoomForSession(session: ClassSession, rooms: SolverInput['rooms']):
 function buildElectiveGroups(sessions: ClassSession[]): Map<string, number[]> {
     const groups = new Map<string, number[]>();
     for (let i = 0; i < sessions.length; i++) {
-        if (!sessions[i].isElective || sessions[i].electiveSlotIndex < 0) continue;
-        const key = `${sessions[i].slotType}-${sessions[i].electiveSlotIndex}`;
+        const s = sessions[i];
+        if (!s.isElective || s.electiveSlotIndex < 0 || !s.basketName) continue;
+        const key = `${s.basketName}|${s.slotType}|${s.electiveSlotIndex}`;
         const arr = groups.get(key);
         if (arr) arr.push(i);
         else groups.set(key, [i]);
@@ -114,40 +115,57 @@ export function generateInitialSolution(input: SolverInput): Solution {
     // Round-robin day assignment to spread load
     const dayLoad = new Array(NUM_DAYS).fill(0);
 
-    // Track which elective groups have already been placed
-    const electivePlacements = new Map<string, { day: number; startBucket: number }>();
+    // For synced baskets: groupKey → { day, startBucket } (shared slot)
+    const syncedBasketSlots = new Map<string, { day: number; startBucket: number }>();
+    // Global set of used day:slot combos across ALL elective baskets (for anti-clash)
+    const usedElectiveSlots = new Set<string>();
 
     const solution: Gene[] = new Array(sessions.length);
 
     for (let i = 0; i < sessions.length; i++) {
         const session = sessions[i];
 
-        // If this is an elective session in a sync group, check if placement exists
-        if (session.isElective && session.electiveSlotIndex >= 0) {
-            const key = `${session.slotType}-${session.electiveSlotIndex}`;
-            const existing = electivePlacements.get(key);
+        // Locked sessions are pre-filled by the caller — skip them
+        if (session.isLocked) {
+            if (!solution[i]) {
+                solution[i] = { day: 1, startBucket: 1, roomIndex: 0 }; // placeholder, overwritten by caller
+            }
+            continue;
+        }
 
+        // Elective basket placement
+        if (session.isElective && session.electiveSlotIndex >= 0 && session.basketName) {
+            const groupKey = `${session.basketName}|${session.slotType}|${session.electiveSlotIndex}`;
+
+            // Both SYNCED and FREE baskets now handle slots exactly the same way:
+            // All members of the same basket+index share one slot.
+            // Differences:
+            // - Synced baskets must remain together (enforced by countElectiveSyncViolations A).
+            // - Free baskets can drift apart later during mutation (since countElectiveSyncViolations B was removed),
+            //   but placing them together initially saves space and is perfectly valid.
+
+            const existing = syncedBasketSlots.get(groupKey);
             if (existing) {
-                // Use the same day+slot, but pick a different room
-                solution[i] = {
-                    day: existing.day,
-                    startBucket: existing.startBucket,
-                    roomIndex: pickRoomForSession(session, rooms),
-                };
+                solution[i] = { day: existing.day, startBucket: existing.startBucket, roomIndex: pickRoomForSession(session, rooms) };
                 continue;
             }
 
-            // First in this group — pick a placement and record it
-            const bestDay = 1 + dayLoad.indexOf(Math.min(...dayLoad));
-            dayLoad[bestDay - 1] += session.duration;
-            const startBucket = randomSafeStart(session.duration);
-
-            electivePlacements.set(key, { day: bestDay, startBucket });
-            solution[i] = {
-                day: bestDay,
-                startBucket,
-                roomIndex: pickRoomForSession(session, rooms),
-            };
+            // First in group — pick a slot not already used by any basket
+            const day = 1 + dayLoad.indexOf(Math.min(...dayLoad));
+            let start = randomSafeStart(session.duration);
+            let key = `${day}:${start}`;
+            let attempts = 0;
+            while (usedElectiveSlots.has(key) && attempts < 30) {
+                start = randomSafeStart(session.duration);
+                const d = 1 + Math.floor(Math.random() * NUM_DAYS);
+                key = `${d}:${start}`;
+                attempts++;
+            }
+            usedElectiveSlots.add(key);
+            const [chosenDay, chosenStart] = key.split(':').map(Number);
+            dayLoad[chosenDay - 1] += session.duration;
+            syncedBasketSlots.set(groupKey, { day: chosenDay, startBucket: chosenStart });
+            solution[i] = { day: chosenDay, startBucket: chosenStart, roomIndex: pickRoomForSession(session, rooms) };
             continue;
         }
 
@@ -179,7 +197,7 @@ function mutateDay(gene: Gene): Gene {
 }
 
 /** Mutate: shift start slot by Gaussian noise, snapping to valid positions */
-function mutateTime(gene: Gene, session: ClassSession, sigma: number): Gene {
+export function mutateTime(gene: Gene, session: ClassSession, sigma: number): Gene {
     const noise = Math.round(gaussianRandom() * sigma);
     const maxStart = SLOTS_PER_DAY - session.duration + 1;
     let newStart = clamp(gene.startBucket + noise, 1, Math.max(1, maxStart));
@@ -205,7 +223,7 @@ function mutateTime(gene: Gene, session: ClassSession, sigma: number): Gene {
 }
 
 /** Mutate: reassign room (respecting Lab/Lecture type) */
-function mutateRoom(session: ClassSession, rooms: SolverInput['rooms']): Gene & { roomIndex: number } {
+export function mutateRoom(session: ClassSession, rooms: SolverInput['rooms']): Gene & { roomIndex: number } {
     return { day: 0, startBucket: 0, roomIndex: pickRoomForSession(session, rooms) };
 }
 
@@ -230,7 +248,7 @@ function trySwap(offspring: Solution, sessions: ClassSession[], idx: number): vo
 }
 
 /** Relocate to a random valid position */
-function mutateRelocate(session: ClassSession, rooms: SolverInput['rooms']): Gene {
+export function mutateRelocate(session: ClassSession, rooms: SolverInput['rooms']): Gene {
     return {
         day: randInt(1, NUM_DAYS),
         startBucket: randomSafeStart(session.duration),
@@ -261,11 +279,18 @@ export function mutate(parent: Solution, input: SolverInput, sigma: number): Sol
         for (const idx of indices) sessionToKey.set(idx, key);
     }
 
+    // Build list of mutable (non-locked) session indices
+    const mutableIndices: number[] = [];
+    for (let i = 0; i < n; i++) {
+        if (!sessions[i].isLocked) mutableIndices.push(i);
+    }
+    if (mutableIndices.length === 0) return offspring;
+
     const mutationFraction = 0.03 + Math.random() * 0.05;
-    const numMutations = Math.max(2, Math.min(20, Math.round(n * mutationFraction)));
+    const numMutations = Math.max(2, Math.min(20, Math.round(mutableIndices.length * mutationFraction)));
 
     for (let m = 0; m < numMutations; m++) {
-        const idx = randInt(0, n - 1);
+        const idx = mutableIndices[randInt(0, mutableIndices.length - 1)];
         const op = randInt(0, 4);
 
         switch (op) {

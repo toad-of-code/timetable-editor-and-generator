@@ -21,13 +21,20 @@ export interface ClassSession {
   /** True if this session belongs to an elective subject */
   isElective: boolean;
   /**
-   * Elective slot index — groups sessions that must be scheduled at the same (day, time).
-   * E.g., "Lecture-0" means the first lecture of all electives should sync.
+   * Elective slot index — groups sessions that must be non-clashing within a basket.
+   * Lecture#0 of all subjects in the same basket share index 0, etc.
    * Only meaningful when isElective = true. -1 otherwise.
    */
   electiveSlotIndex: number;
+  /**
+   * The elective basket this session belongs to (e.g., 'basket-1', 'HSMC', 'lang').
+   * Null for core subjects. Used by the basket constraint system.
+   */
+  basketName: string | null;
   /** True if this session is for the WMC (whole batch) group */
   isWMCGroup: boolean;
+  /** True if this session is locked (from a published timetable) and must not be mutated */
+  isLocked?: boolean;
 }
 
 /**

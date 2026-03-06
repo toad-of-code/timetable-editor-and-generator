@@ -50,6 +50,7 @@ export function RoomTimetableViewer({ onBack }: RoomTimetableViewerProps) {
   const { exportToWorkbook, isExporting } = useGoogleSheets();
 
   // --- Helpers ---
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const extractVal = (data: any, key: string) => {
     if (!data) return 'N/A';
     if (Array.isArray(data)) return data.length > 0 ? data[0][key] : 'N/A';
@@ -88,6 +89,7 @@ export function RoomTimetableViewer({ onBack }: RoomTimetableViewerProps) {
 
         if (error) throw error;
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const rawData = data as any[];
         const cleanSlots: FetchedSlot[] = rawData
           .filter(s => s.rooms?.name)
@@ -118,6 +120,7 @@ export function RoomTimetableViewer({ onBack }: RoomTimetableViewerProps) {
       }
     };
     loadAllData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // --- 2. Filter Logic (Single Mode) ---
@@ -153,7 +156,7 @@ export function RoomTimetableViewer({ onBack }: RoomTimetableViewerProps) {
       return true;
     });
 
-    let cols: TimeColumn[] = [];
+    const cols: TimeColumn[] = [];
     for (let i = 0; i < filteredTimes.length - 1; i++) {
       const start = filteredTimes[i];
       const end = filteredTimes[i + 1];
@@ -290,7 +293,7 @@ export function RoomTimetableViewer({ onBack }: RoomTimetableViewerProps) {
   const renderCellContent = (dayIndex: number, column: TimeColumn) => {
     const colStart = parseInt(column.start.replace(':', ''));
     const colEnd = parseInt(column.end.replace(':', ''));
-    let cellSlots = processedSlots.filter(s => {
+    const cellSlots = processedSlots.filter(s => {
       if (s.day_of_week !== dayIndex + 1) return false;
       const slotStart = parseInt(s.start_time.replace(':', ''));
       const slotEnd = parseInt(s.end_time.replace(':', ''));
@@ -310,7 +313,7 @@ export function RoomTimetableViewer({ onBack }: RoomTimetableViewerProps) {
       const pdf = new jsPDF({ orientation: 'l', unit: 'mm', format: [element.scrollWidth * 0.264583 + 10, element.scrollHeight * 0.264583 + 10] });
       pdf.addImage(imgData, 'PNG', 5, 5, element.scrollWidth * 0.264583, element.scrollHeight * 0.264583);
       pdf.save(`Room-${selectedRoom}.pdf`);
-    } catch (err) { alert('PDF Error'); }
+    } catch { alert('PDF Error'); }
   };
 
   if (loading) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin w-8 h-8 text-indigo-600" /></div>;

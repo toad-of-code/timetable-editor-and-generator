@@ -7,10 +7,10 @@ interface Props {
     professors: Professor[];
     expertiseMap: Record<string, Professor[]>;
     assignments: Record<string, Record<string, string>>;
-    sectionModes: Record<string, 'all' | 'sections'>;
+    sectionModes: Record<string, 'all' | 'sections' | 'itbi'>;
     onAssign: (subjectId: string, groupId: string, profId: string) => void;
     onApplyToAll: (subjectId: string, profId: string) => void;
-    onSectionModeChange: (subjectId: string, mode: 'all' | 'sections') => void;
+    onSectionModeChange: (subjectId: string, mode: 'all' | 'sections' | 'itbi') => void;
 }
 
 export function AssignmentMatrix({
@@ -24,20 +24,26 @@ export function AssignmentMatrix({
     onApplyToAll,
     onSectionModeChange,
 }: Props) {
+    // Helper: detect IT-BI group (robust matching for variations)
+    const isITBIGroup = (name: string) => /IT[\s-]*BI/i.test(name);
+
     // Split groups
     const allGroup = groups.find(g => g.name === 'WMC');
-    const sectionGroups = groups.filter(g => g.name !== 'WMC');
+    const itbiGroup = groups.find(g => isITBIGroup(g.name));
+    const sectionGroups = groups.filter(g => g.name !== 'WMC' && !isITBIGroup(g.name));
 
     // Count filled cells (respecting modes)
     let totalCells = 0;
     let filledCells = 0;
     // Smart default: electives → 'all', everything else → 'sections'
     const getDefaultMode = (sub: { subject_type: string }): 'all' | 'sections' =>
-        sub.subject_type === 'Elective' ? 'all' : 'sections';
+        (sub.subject_type === 'Elective' || sub.subject_type === 'Minor') ? 'all' : 'sections';
 
     subjects.forEach(sub => {
         const mode = sectionModes[sub.id] ?? getDefaultMode(sub);
-        const relevantGroups = mode === 'all' && allGroup ? [allGroup] : sectionGroups;
+        const relevantGroups = mode === 'all' && allGroup ? [allGroup]
+            : mode === 'itbi' && itbiGroup ? [itbiGroup]
+                : sectionGroups;
         totalCells += relevantGroups.length;
         relevantGroups.forEach(g => {
             if (assignments[sub.id]?.[g.id]) filledCells++;
@@ -80,7 +86,9 @@ export function AssignmentMatrix({
                         const rowBg = si % 2 === 0 ? 'bg-white' : 'bg-slate-50/50';
 
                         // Which groups to show based on mode
-                        const activeGroups = mode === 'all' && allGroup ? [allGroup] : sectionGroups;
+                        const activeGroups = mode === 'all' && allGroup ? [allGroup]
+                            : mode === 'itbi' && itbiGroup ? [itbiGroup]
+                                : sectionGroups;
 
                         return (
                             <div key={subject.id} className={`p-4 ${rowBg}`}>
@@ -125,6 +133,18 @@ export function AssignmentMatrix({
                                             <User2 className="w-3.5 h-3.5" />
                                             Per Section
                                         </button>
+                                        {itbiGroup && (
+                                            <button
+                                                onClick={() => onSectionModeChange(subject.id, 'itbi')}
+                                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition ${mode === 'itbi'
+                                                    ? 'bg-teal-600 text-white shadow-sm'
+                                                    : 'text-gray-500 hover:text-gray-700'
+                                                    }`}
+                                            >
+                                                <Users className="w-3.5 h-3.5" />
+                                                IT-BI Only
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
 

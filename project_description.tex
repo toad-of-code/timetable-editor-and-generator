@@ -1,0 +1,90 @@
+\documentclass[11pt, a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{geometry}
+\geometry{margin=1in}
+\usepackage{hyperref}
+
+\title{Timetable Editor and Generator \\ \vspace{0.5em} \large Project Description}
+\author{}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+This document outlines the architecture and mathematical formulation of the Timetable Editor and Generator project. The system is designed to automate the scheduling of university or school class sessions while rigorously adhering to institutional constraints.
+
+\section{User Interface (UI)}
+The frontend is a modern web application designed for flexibility and ease of use. Key UI modules include:
+\begin{itemize}
+    \item \textbf{Configuration Matrix}: A setup module where users can define semesters, student groups (sections), rooms, subjects, and map professors to classes.
+    \item \textbf{Interactive Draft Screen}: A visual timetable layout where users can view generated schedules, manually drag and drop sessions, and instantly see conflict highlights if constraints are implicitly violated.
+    \item \textbf{Generator Dashboard}: A progress view that tracks the real-time execution of the solver, displaying generation metrics, fitness scores, and specific constraint violation breakdowns.
+\end{itemize}
+
+\section{Timetable Solver Formulation}
+The underlying engine utilizes a custom $(1+1)$-Evolution Strategies (ES) optimization algorithm. The solver aggressively searches the solution space and adapts its mutation step size ($\sigma$) using the $1/5$th success rule, with periodic stagnation restarts to escape local optima.
+
+\subsection{Variables and Search Space}
+Let $S = \{S_1, S_2, \dots, S_N\}$ be the set of all class sessions to be scheduled. A complete timetable solution is represented by a set of genes $G = \{g_1, g_2, \dots, g_N\}$, where each gene $g_i$ corresponds to the spatio-temporal assignment of session $S_i$.
+\[
+g_i = (d_i, t_i, r_i)
+\]
+Where:
+\begin{itemize}
+    \item $d_i \in \{1, \dots, \text{Days}\}$: The day of the session.
+    \item $t_i \in \{1, \dots, H\}$: The starting time bucket (slot index).
+    \item $r_i \in R$: The assigned room index from the set of available rooms $R$.
+\end{itemize}
+Additional session parameters are defined as:
+\begin{itemize}
+    \item $D_i$: The duration of session $i$ (in contiguous slots).
+    \item $B$: The set of slot indices that precede a break or lunch boundary.
+\end{itemize}
+
+\subsection{Objective Function}
+The solver evaluates candidate solutions by minimizing a fitness score function $f(G)$, formulated as a weighted sum of hard violations and soft penalties:
+\[
+\min \quad f(G) = w_H \cdot \sum_{k=1}^{9} V_{\text{hard}, k}(G) + w_S \cdot V_{\text{soft}}(G)
+\]
+Where $w_H \gg w_S$ ensures that hard constraint feasibility is strongly prioritized over soft constraint optimization. A solution is strictly feasible if $\sum V_{\text{hard}, k}(G) = 0$.
+
+\subsection{Hard Constraints ($V_{\text{hard}}$)}
+The following hard constraints return the count of specific violations. The goal is to drive each of these counts to $0$.
+
+\begin{enumerate}
+    \item \textbf{Time Frame Boundaries}: Sessions must not exceed the maximum slots per day ($H$).
+    \[ t_i + D_i - 1 \le H \quad \forall i \]
+    
+    \item \textbf{Break \& Lunch Boundary Non-Crossing}: Multi-slot sessions ($D_i > 1$) cannot span across designated break periods.
+    \[ \{t_i, t_i+1, \dots, t_i + D_i - 2\} \cap B = \emptyset \quad \forall i \]
+
+    \item \textbf{Room Non-Overlap}: A room can host at most one class at any given time. For any two sessions $i \neq j$ occurring on the same day ($d_i = d_j$) and sharing time slots, $r_i \neq r_j$.
+
+    \item \textbf{Professor Non-Overlap}: A professor cannot teach two distinct classes at the same time. Let $P(i)$ be the professor of session $i$. If $d_i = d_j$ and times overlap, then $P(i) \neq P(j)$.
+
+    \item \textbf{Student Group Non-Overlap}: A student group (section) can attend at most one non-elective class at a time. Electives assigned to the same group run concurrently, meaning overlap between electives is permitted, but an elective overlapping with a core session yields a violation.
+
+    \item \textbf{Elective Synchronization}: All elective sessions grouped by a common slot identifier $E_{sync} = (\text{slotType}, \text{electiveSlotIndex})$ must occur simultaneously.
+    \[ \forall i, j \in E_{sync}, \quad d_i = d_j \text{ and } t_i = t_j \]
+
+    \item \textbf{Lab Room for Practicals}: Practical sessions must be assigned to designated laboratory rooms.
+    \[ \text{If Type}(i) = \text{Practical}, \text{ then Type}(r_i) = \text{Lab} \]
+
+    \item \textbf{WMC-Section Overlap}: Whole-batch sessions (WMC) are meant for all students in a cohort. A WMC session cannot overlap with any individual section-level session for that same cohort.
+
+    \item \textbf{Home Room Adherence}: Standard lectures/tutorials must be scheduled in their pre-assigned home room. Practicals and electives are exempt from this restriction.
+\end{enumerate}
+
+\subsection{Soft Constraints ($V_{\text{soft}}$)}
+Soft constraints represent preferences to optimize student and faculty experience.
+\begin{enumerate}
+    \item \textbf{Student Gap Penalty}: Minimizes the number of free periods (gaps) between a group's first and last class on any given day. Let $first_{g,d}$ and $last_{g,d}$ be the earliest and latest slot indices occupied by group $g$ on day $d$, and let $C_{g,d}$ be the actual number of slots they are in class. The penalty is:
+    \[
+    V_{\text{soft}} = \sum_{g \in Groups} \sum_{d \in Days} \max\left(0, (last_{g,d} - first_{g,d} + 1) - C_{g,d}\right)
+    \]
+\end{enumerate}
+
+\end{document}
