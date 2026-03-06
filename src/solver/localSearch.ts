@@ -162,3 +162,126 @@ export function runLNS(
 
     return null;
 }
+
+// ─── Full LNS: Destroy & Repair ALL clashing sessions ──────────────────────────
+
+/**
+ * Identify session indices involved in clashes (room, professor, group overlaps).
+ */
+function findClashingIndices(input: SolverInput, solution: Solution): Set<number> {
+    const clashing = new Set<number>();
+    const { sessions, rooms } = input;
+
+    // Helper: check occupancy for a given key function
+    const checkOccupancy = (keyFn: (s: typeof sessions[0], g: Gene) => string) => {
+        const map = new Map<string, number[]>();
+        for (let i = 0; i < sessions.length; i++) {
+            const gene = solution[i];
+            const key = keyFn(sessions[i], gene);
+            const start = gene.startBucket;
+            const end = start + sessions[i].duration - 1;
+            for (let s = start; s <= end; s++) {
+                const slot = `${key}:${gene.day}:${s}`;
+                const arr = map.get(slot);
+                if (arr) { arr.push(i); }
+                else map.set(slot, [i]);
+            }
+        }
+        for (const arr of map.values()) {
+            if (arr.length > 1) {
+                for (const idx of arr) clashing.add(idx);
+            }
+        }
+    };
+
+    // Room overlaps
+    checkOccupancy((_s, g) => `R${rooms[g.roomIndex]?.id ?? g.roomIndex}`);
+
+    // Professor overlaps (skip empty/unknown)
+    checkOccupancy((s) => s.professorId ? `P${s.professorId}` : `P__EMPTY_${s.id}`);
+    // Remove false positives from empty-prof keys
+    // (they use unique keys so they never clash — no cleanup needed)
+
+    // Group overlaps
+    checkOccupancy((s) => `G${s.groupId}`);
+
+    // Remove locked sessions — we cannot move those
+    for (const idx of clashing) {
+        if (sessions[idx].isLocked) clashing.delete(idx);
+    }
+
+    return clashing;
+}
+
+/**
+ * Full LNS: Identify ALL sessions in conflict, destroy their placements,
+ * and repair via randomised hill-climbing.
+ *
+ * @returns Improved solution + fitness, or null if no improvement found.
+ */
+export function runFullLNS(
+    input: SolverInput,
+    solution: Solution,
+    maxAttempts: number = 1000,
+): { solution: Solution; fitness: FitnessResult } | null {
+    const baseFitness = evaluate(input, solution);
+
+    if (baseFitness.hardViolations === 0) {
+        return { solution, fitness: baseFitness };
+    }
+
+    // Find all clashing session indices
+    const clashingIndices = findClashingIndices(input, solution);
+    if (clashingIndices.size === 0) {
+        return { solution, fitness: baseFitness };
+    }
+
+    const targets = Array.from(clashingIndices);
+
+    let bestSolution = solution.map(g => ({ ...g }));
+    let bestFitness = baseFitness;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        const candidate = bestSolution.map(g => ({ ...g }));
+
+        // Pick a random target from the clashing set
+        const idx = targets[Math.floor(Math.random() * targets.length)];
+        const session = input.sessions[idx];
+
+        // Apply a random mutation strategy
+        const strategy = Math.random();
+        if (strategy < 0.5) {
+            // Full relocate (new day + time + room)
+            candidate[idx] = mutateRelocate(session, input.rooms);
+        } else if (strategy < 0.8) {
+            // Just shift time
+            candidate[idx] = {
+                ...candidate[idx],
+                ...mutateTime(candidate[idx], session, 3.0),
+            };
+        } else {
+            // Just change room
+            const newRoom = mutateRoom(session, input.rooms);
+            candidate[idx] = { ...candidate[idx], roomIndex: newRoom.roomIndex };
+        }
+
+        const candidateFitness = evaluate(input, candidate);
+
+        if (candidateFitness.total < bestFitness.total) {
+            bestSolution = candidate;
+            bestFitness = candidateFitness;
+
+            // Update targets — re-identify what's still clashing
+            if (bestFitness.hardViolations === 0) {
+                return { solution: bestSolution, fitness: bestFitness };
+            }
+        }
+    }
+
+    // Return improvement if any
+    if (bestFitness.total < baseFitness.total) {
+        return { solution: bestSolution, fitness: bestFitness };
+    }
+
+    return null;
+}
