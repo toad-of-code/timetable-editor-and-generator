@@ -1,0 +1,123 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{geometry}
+\geometry{margin=1in}
+
+\title{Mathematical Formulation of Timetable Generation Engine}
+\author{Solver Architecture}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{Indices and Sets}
+\begin{itemize}
+    \item $S = \{1, 2, \dots, N_S\}$: Set of all class sessions.
+    \item $R = \{1, 2, \dots, N_R\}$: Set of all available rooms.
+    \item $D = \{1, 2, \dots, 5\}$: Set of working days (Mon-Fri).
+    \item $T = \{1, 2, \dots, 8\}$: Set of daily time slots.
+    \item $P$: Set of all professors.
+    \item $G$: Set of all student groups (sections).
+    \item $B$: Set of all break time slots ($\text{slot } 2$, $\text{slot } 4$).
+\end{itemize}
+
+\section{Parameters}
+\begin{itemize}
+    \item $d_s \in \mathbb{N}$: Duration (number of slots) required for session $s$.
+    \item $home\_room_s \in R$: The designated home room for core lecture session $s$.
+    \item $basket\_name_s$: The elective basket identifier for elective session $s$.
+    \item $is\_lab_s \in \{0, 1\}$: 1 if session $s$ is a Practical/Lab, otherwise 0.
+    \item $is\_wmc_s \in \{0, 1\}$: 1 if session $s$ requires the entire batch (WMC), otherwise 0.
+    \item $type\_lab_r \in \{0, 1\}$: 1 if room $r$ is a designated Laboratory, otherwise 0.
+\end{itemize}
+
+\section{Decision Variables (The Chromosome/Gene Definition)}
+A solution (chromosome) assigns every session $s \in S$ to a specific spatial and temporal coordinate:
+\begin{itemize}
+    \item $x_s \in D$: The day assigned to session $s$.
+    \item $y_s \in T$: The starting time slot assigned to session $s$.
+    \item $z_s \in R$: The room assigned to session $s$.
+\end{itemize}
+
+\section{Hard Constraints (Violations)}
+A timetable is deemed strictly feasible if and only if the sum of all violative instances is mathematically equal to zero.
+
+\subsection{1. Time Boundaries}
+A session must not span beyond the chronological limits of a day:
+\begin{equation}
+    C_{time} = \sum_{s \in S} \max(0, y_s + d_s - 1 - |T|)
+\end{equation}
+
+\subsection{2. Break Boundary Crossing}
+A continuous multi-slot session $s$ ($d_s > 1$) cannot overlap with any defined structural breaks $b \in B$:
+\begin{equation}
+    C_{break} = \sum_{s \in S} \mathbb{I} \left[ \exists t \in [y_s, y_s + d_s - 1] \text{ such that } t \in B \right]
+\end{equation}
+where $\mathbb{I}[\cdot]$ is the indicator function returning 1 if the condition is conceptually true, 0 otherwise.
+
+\subsection{3. Room Occupancy Non-Overlap}
+A single physical space cannot host distinct sessions concurrently:
+\begin{equation}
+    C_{room} = \sum_{r \in R} \sum_{d \in D} \sum_{t \in T} \max\left(0, \left(\sum_{s \in S} \mathbb{I}[z_s = r \land x_s = d \land t \in [y_s, y_s + d_s - 1]]\right) - 1\right)
+\end{equation}
+
+\subsection{4. Professor Non-Overlap}
+A professor cannot be mapped to mutually exclusive spatial coordinates simultaneously:
+\begin{equation}
+    C_{prof} = \sum_{p \in P} \sum_{d \in D} \sum_{t \in T} \max\left(0, \left(\sum_{s \in S_{prof(p)}} \mathbb{I}[x_s = d \land t \in [y_s, y_s + d_s - 1]]\right) - 1\right)
+\end{equation}
+
+\subsection{5. Student Group Non-Overlap}
+A distinct student cohort cannot attend independent academic events concurrently (excluding intra-basket electives):
+\begin{equation}
+    C_{group} = \sum_{g \in G} \sum_{d \in D} \sum_{t \in T} \max\left(0, \left(\sum_{s \in S_{group(g)} \setminus S_{elective}} \mathbb{I}[x_s = d \land t \in [y_s, y_s + d_s - 1]]\right) - 1\right)
+\end{equation}
+
+\subsection{6. Lab Room Constraints}
+Practical laboratory sessions must occur strictly in designated lab environments:
+\begin{equation}
+    C_{lab\_room} = \sum_{s \in S} \mathbb{I}[is\_lab_s = 1 \land type\_lab_{z_s} = 0]
+\end{equation}
+
+\subsection{7. Home Room Constraints}
+Core theoretical lectures/tutorials must occur in the inherited home room of the target section:
+\begin{equation}
+    C_{home\_room} = \sum_{s \in S} \mathbb{I}[is\_lab_s = 0 \land S_{elective} \not\ni s \land z_s \neq home\_room_s]
+\end{equation}
+
+\subsection{8. WMC vs Section Constraints}
+A global block (WMC) targeting all sections precludes independent subgroup scheduling concurrently:
+\begin{equation}
+    C_{wmc} = \sum_{s_{wmc} \in S} \sum_{s_{sec} \in S_{group(g)}} \mathbb{I}[is\_wmc_{s_{wmc}} = 1 \land x_{s_{wmc}} = x_{s_{sec}} \land [y_{s_{wmc}}, y_{s_{wmc}} + d_{s_{wmc}} - 1] \cap [y_{s_{sec}}, y_{s_{sec}} + d_{s_{sec}} - 1] \neq \emptyset]
+\end{equation}
+
+\subsection{9. Elective Synchronization Constraints}
+\textbf{Synced Baskets:} Elective alternatives $s_i, s_j$ belonging to a singular synchronized basket $\beta$ must share identical initiation bounds:
+\begin{equation}
+    C_{sync} = \sum_{\beta \in \text{Synced\_Baskets}} \sum_{\substack{s_i, s_j \in \beta \\ i < j}} \mathbb{I}[x_{s_i} \neq x_{s_j} \lor y_{s_i} \neq y_{s_j}]
+\end{equation}
+
+\textbf{Strategic Anti-Clash (Cross-Basket):} Concurrency is penalized if sessions originate from distinct inter-disciplinary thematic frameworks (baskets):
+\begin{equation}
+    C_{anti\_clash} = \sum_{d \in D} \sum_{t \in T} \max\left(0, |\bigcup_{s \in S_{elective} \text{ at } (d,t)} basket\_name_s| - 1\right)
+\end{equation}
+
+\section{Objective Function (Fitness Evaluation)}
+The overarching goal of the evolutionary algorithm is the strict minimization of the scalar fitness evaluation function $F$:
+
+\begin{equation}
+    V_{hard} = C_{time} + C_{break} + C_{room} + C_{prof} + C_{group} + C_{lab\_room} + C_{home\_room} + C_{wmc} + C_{sync} + C_{anti\_clash}
+\end{equation}
+
+\begin{equation}
+    P_{gap} = \sum_{g \in G} \sum_{d \in D} \left( \max_{s \in S_{group(g)@d}}(y_s + d_s - 1) - \min_{s \in S_{group(g)@d}}(y_s) + 1 - N_{active\_slots\_for\_g\_at\_d} \right)
+\end{equation}
+
+\begin{equation}
+    \min F = (V_{hard} \times W_{hard\_penalty}) + (P_{gap} \times W_{gap\_penalty})
+\end{equation}
+Where $W_{hard\_penalty} \gg W_{gap\_penalty}$.
+
+\end{document}

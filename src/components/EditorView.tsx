@@ -66,8 +66,6 @@ export function EditorView({ initialTimetableId, onBack }: EditorViewProps) {
 
     // ── LNS state ──
     const [isLnsRunning, setIsLnsRunning] = useState(false);
-    const [lnsResult, setLnsResult] = useState<{ improved: boolean; remaining: number } | null>(null);
-    const [lnsPanelTab, setLnsPanelTab] = useState<'auto' | 'manual'>('auto');
 
     // ── Drag state ──
     const dragSlotId = useRef<string | null>(null);
@@ -336,7 +334,6 @@ export function EditorView({ initialTimetableId, onBack }: EditorViewProps) {
     const handleRunLns = useCallback(() => {
         if (slots.length === 0) return;
         setIsLnsRunning(true);
-        setLnsResult(null);
 
         // Build the same solver input as feasibility check
         const roomList = rooms.map(r => ({ id: r.id, name: r.name, roomType: r.room_type }));
@@ -395,14 +392,13 @@ export function EditorView({ initialTimetableId, onBack }: EditorViewProps) {
             });
             setSlots(newSlots);
             setIsFeasibilityDirty(true);
-            setLnsResult({ improved: true, remaining: result.fitness.hardViolations });
+
             if (result.fitness.hardViolations === 0) {
                 toast.success('All clashes resolved! ✨');
             } else {
                 toast(`Reduced to ${result.fitness.hardViolations} clash(es)`, { icon: '🔧' });
             }
         } else {
-            setLnsResult({ improved: false, remaining: feasibility?.fitness?.hardViolations ?? 0 });
             toast('No improvement found — try manual fixes', { icon: '😕' });
         }
         setIsLnsRunning(false);
@@ -700,6 +696,17 @@ export function EditorView({ initialTimetableId, onBack }: EditorViewProps) {
                         <CheckCircle2 className="w-3.5 h-3.5" /> Check
                     </button>
 
+                    {/* Auto-Fix button */}
+                    <button
+                        onClick={handleRunLns}
+                        disabled={isLnsRunning || conflictSlotIds.size === 0}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded hover:from-indigo-700 hover:to-purple-700 transition disabled:opacity-40 shadow-sm"
+                    >
+                        {isLnsRunning
+                            ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Fixing…</>
+                            : <><Wand2 className="w-3.5 h-3.5" /> Auto-Fix</>}
+                    </button>
+
                     {/* Undo */}
                     <button
                         onClick={handleUndo}
@@ -829,184 +836,61 @@ export function EditorView({ initialTimetableId, onBack }: EditorViewProps) {
                 </div>
             )}
 
-            {/* ── Timetable Grid + LNS Side Panel ── */}
+            {/* ── Timetable Grid ── */}
             {!loadingSlots && slots.length > 0 && (
-                <div className="flex gap-4">
-                    {/* Main Grid */}
-                    <div className="flex-1 min-w-0">
-                        <div className="overflow-x-auto bg-white p-1 shadow-lg border border-gray-300 rounded-sm">
-                            <div className="min-w-max">
-                                <table className="w-full border-collapse border border-black text-center text-xs">
-                                    <thead>
-                                        <tr className="bg-[#e6b8af] h-10">
-                                            <th className="border border-black w-14 shadow-sm">Day</th>
-                                            {dynamicTimeColumns.map((col, idx) => (
-                                                <th key={idx} className={`border border-black p-1 ${col.isLunch ? 'w-8 bg-gray-200' : ''}`}>
-                                                    {col.isLunch
-                                                        ? <span className="writing-mode-vertical text-[9px] tracking-widest text-gray-600">{col.label}</span>
-                                                        : col.label}
-                                                </th>
-                                            ))}
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {DAYS.map((day, dayIndex) => (
-                                            <tr key={day} className="border-b border-black bg-white h-65">
-                                                <td className="border border-black bg-[#e6b8af] font-bold text-sm writing-mode-vertical md:writing-mode-horizontal">
-                                                    {day}
-                                                </td>
-                                                {dynamicTimeColumns.map((col, cIdx) => {
-                                                    if (col.isLunch) {
-                                                        return (
-                                                            <td key={cIdx} className="border border-black bg-gray-100 font-bold writing-mode-vertical text-[10px] tracking-widest text-gray-500 select-none">
-                                                                {col.label}
-                                                            </td>
-                                                        );
-                                                    }
+                <>
+                    <div className="overflow-x-auto bg-white p-1 shadow-lg border border-gray-300 rounded-sm">
+                        <div className="min-w-max">
+                            <table className="w-full border-collapse border border-black text-center text-xs">
+                                <thead>
+                                    <tr className="bg-[#e6b8af] h-10">
+                                        <th className="border border-black w-14 shadow-sm">Day</th>
+                                        {dynamicTimeColumns.map((col, idx) => (
+                                            <th key={idx} className={`border border-black p-1 ${col.isLunch ? 'w-8 bg-gray-200' : ''}`}>
+                                                {col.isLunch
+                                                    ? <span className="writing-mode-vertical text-[9px] tracking-widest text-gray-600">{col.label}</span>
+                                                    : col.label}
+                                            </th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {DAYS.map((day, dayIndex) => (
+                                        <tr key={day} className="border-b border-black bg-white h-65">
+                                            <td className="border border-black bg-[#e6b8af] font-bold text-sm writing-mode-vertical md:writing-mode-horizontal">
+                                                {day}
+                                            </td>
+                                            {dynamicTimeColumns.map((col, cIdx) => {
+                                                if (col.isLunch) {
                                                     return (
-                                                        <td
-                                                            key={cIdx}
-                                                            onDragOver={handleDragOver}
-                                                            onDrop={() => handleDrop(dayIndex, col)}
-                                                            className="border border-black p-0 hover:bg-blue-50/20 transition-colors align-top h-65"
-                                                        >
-                                                            {renderCellContent(dayIndex, col)}
+                                                        <td key={cIdx} className="border border-black bg-gray-100 font-bold writing-mode-vertical text-[10px] tracking-widest text-gray-500 select-none">
+                                                            {col.label}
                                                         </td>
                                                     );
-                                                })}
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-
-                        <div className="mt-3 text-xs text-gray-400 text-center">
-                            💡 Drag & drop class items between cells. Click the ✏️ icon on hover to edit room/professor.
-                            Click 'Check' in the top bar to verify constraints.
-                        </div>
-                    </div>
-
-                    {/* ── LNS Side Panel ── */}
-                    <div className="w-[220px] flex-shrink-0 sticky top-24 self-start">
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                            {/* Header */}
-                            <div className="px-4 py-3 bg-gradient-to-r from-indigo-50 to-purple-50 border-b border-gray-200">
-                                <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
-                                    <Wand2 className="w-4 h-4 text-indigo-600" />
-                                    Smart Editor
-                                </h3>
-                            </div>
-
-                            {/* Tabs */}
-                            <div className="flex border-b border-gray-200">
-                                <button
-                                    onClick={() => setLnsPanelTab('auto')}
-                                    className={`flex-1 py-2 text-[11px] font-semibold transition-colors
-                                        ${lnsPanelTab === 'auto'
-                                            ? 'text-indigo-700 border-b-2 border-indigo-600 bg-indigo-50/50'
-                                            : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
-                                >
-                                    ⚡ Auto-Fix
-                                </button>
-                                <button
-                                    onClick={() => setLnsPanelTab('manual')}
-                                    className={`flex-1 py-2 text-[11px] font-semibold transition-colors
-                                        ${lnsPanelTab === 'manual'
-                                            ? 'text-indigo-700 border-b-2 border-indigo-600 bg-indigo-50/50'
-                                            : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
-                                >
-                                    ✋ Manual
-                                </button>
-                            </div>
-
-                            <div className="p-4 space-y-3">
-                                {/* Clash counter */}
-                                <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold border
-                                    ${conflictSlotIds.size > 0
-                                        ? 'bg-red-50 border-red-200 text-red-700'
-                                        : 'bg-green-50 border-green-200 text-green-700'}`}
-                                >
-                                    {conflictSlotIds.size > 0
-                                        ? <><AlertTriangle className="w-3.5 h-3.5" /> {conflictSlotIds.size} clash(es)</>
-                                        : <><CheckCircle2 className="w-3.5 h-3.5" /> No clashes</>}
-                                </div>
-
-                                {lnsPanelTab === 'auto' ? (
-                                    <>
-                                        {/* Auto-Fix button */}
-                                        <button
-                                            onClick={handleRunLns}
-                                            disabled={isLnsRunning || conflictSlotIds.size === 0}
-                                            className="w-full flex items-center justify-center gap-2 px-3 py-2.5 text-xs font-semibold
-                                                bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg
-                                                hover:from-indigo-700 hover:to-purple-700 transition-all
-                                                disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
-                                        >
-                                            {isLnsRunning
-                                                ? <><Loader2 className="w-4 h-4 animate-spin" /> Running LNS…</>
-                                                : <><Wand2 className="w-4 h-4" /> Auto-Fix Clashes</>}
-                                        </button>
-
-                                        {/* LNS result badge */}
-                                        {lnsResult && (
-                                            <div className={`text-[11px] px-3 py-2 rounded-lg border font-medium
-                                                ${lnsResult.improved
-                                                    ? lnsResult.remaining === 0
-                                                        ? 'bg-green-50 border-green-200 text-green-700'
-                                                        : 'bg-amber-50 border-amber-200 text-amber-700'
-                                                    : 'bg-gray-50 border-gray-200 text-gray-500'}`}
-                                            >
-                                                {lnsResult.improved
-                                                    ? lnsResult.remaining === 0
-                                                        ? '✅ All clashes resolved!'
-                                                        : `🔧 Reduced to ${lnsResult.remaining} clash(es)`
-                                                    : '😕 No improvement found'}
-                                            </div>
-                                        )}
-
-                                        {/* Legend */}
-                                        <p className="text-[10px] text-gray-400 leading-snug">
-                                            LNS (Large Neighbourhood Search) randomly relocates clashing classes
-                                            and uses hill-climbing to find a better arrangement. You can Undo the result.
-                                        </p>
-                                    </>
-                                ) : (
-                                    <>
-                                        {/* Manual tab — list of clashing slots */}
-                                        {conflictSlotIds.size === 0 ? (
-                                            <p className="text-[11px] text-gray-400 text-center py-4">
-                                                No clashes to fix! 🎉
-                                            </p>
-                                        ) : (
-                                            <div className="space-y-1.5 max-h-[400px] overflow-y-auto custom-scrollbar">
-                                                {slots.filter(s => conflictSlotIds.has(s.id)).map(slot => (
-                                                    <div
-                                                        key={slot.id}
-                                                        className="px-2 py-1.5 rounded border border-red-200 bg-red-50/50 text-[10px]"
+                                                }
+                                                return (
+                                                    <td
+                                                        key={cIdx}
+                                                        onDragOver={handleDragOver}
+                                                        onDrop={() => handleDrop(dayIndex, col)}
+                                                        className="border border-black p-0 hover:bg-blue-50/20 transition-colors align-top h-65"
                                                     >
-                                                        <div className="font-bold text-red-700">
-                                                            {slot.subject_code} ({slot.slot_type.charAt(0)})
-                                                        </div>
-                                                        <div className="text-gray-500">
-                                                            {DAYS[slot.day_of_week - 1]} • {convertTo12Hour(slot.start_time.slice(0, 5))}
-                                                        </div>
-                                                        <div className="text-gray-400">
-                                                            {slot.group_name} • {slot.room_name}
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-                                        <p className="text-[10px] text-gray-400 leading-snug">
-                                            Drag any red-highlighted class to a free cell to fix it manually.
-                                        </p>
-                                    </>
-                                )}
-                            </div>
+                                                        {renderCellContent(dayIndex, col)}
+                                                    </td>
+                                                );
+                                            })}
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
                         </div>
                     </div>
-                </div>
+
+                    <div className="mt-3 text-xs text-gray-400 text-center">
+                        💡 Drag & drop class items between cells. Click the ✏️ icon on hover to edit room/professor.
+                        Click 'Check' in the top bar to verify constraints.
+                    </div>
+                </>
             )}
 
             {/* ── No slots ── */}

@@ -47,11 +47,10 @@ export function SolverProgressCard({ progress, onCancel }: Props) {
             </div>
 
             {/* Stats grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-center">
                 <StatBox label="Generation" value={`${progress.generation.toLocaleString()} / ${progress.maxGenerations.toLocaleString()}`} />
                 <StatBox label="Hard Violations" value={progress.fitness.hardViolations.toString()} color={progress.fitness.hardViolations === 0 ? 'text-green-600' : 'text-red-600'} />
                 <StatBox label="Gap Penalty" value={progress.fitness.gapPenalty.toString()} />
-                <StatBox label="σ (step size)" value={progress.sigma.toFixed(2)} />
             </div>
 
             {/* Footer */}
