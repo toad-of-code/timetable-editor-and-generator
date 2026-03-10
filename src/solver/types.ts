@@ -35,6 +35,13 @@ export interface ClassSession {
   isWMCGroup: boolean;
   /** True if this session is locked (from a published timetable) and must not be mutated */
   isLocked?: boolean;
+  /**
+   * 2+1 format marker for lecture sessions.
+   *  0   = this is the one double-lecture (2-hour) block.
+   * -1   = this is a single-lecture (1-hour) remainder slot.
+   * -2   = not applicable (elective, tutorial, practical, or lectures < 2).
+   */
+  lecturePairIndex: number;
 }
 
 /**
@@ -98,6 +105,8 @@ export interface FitnessResult {
     labRoom: number;
     wmcSectionOverlap: number;
     homeRoom: number;
+    /** 2+1 format: penalty when the double-lecture and single-lecture for the same subject+group land on the same day */
+    twoOneLecture: number;
   };
 }
 

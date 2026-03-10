@@ -297,20 +297,53 @@ export function EditorView({ initialTimetableId, onBack }: EditorViewProps) {
         const roomIdToIndex = new Map<string, number>();
         roomList.forEach((r, i) => roomIdToIndex.set(r.id, i));
 
+        // ── 2+1 lecturePairIndex inference ──────────────────────────────────────
+        // The editor doesn't store lecturePairIndex in the DB, but we can infer it:
+        //   • A Lecture slot with duration=2 → the double-lecture block (index 0)
+        //   • A Lecture slot with duration=1, AND the same (subjectId, groupId)
+        //     has a duration=2 sibling → remainder single-lecture slot (index -1)
+        //   • Everything else → not applicable (index -2)
+        // This lets countTwoOneLectureViolations() fire correctly in the editor.
+        const lectureDoubleSet = new Set<string>(); // "subjectId|groupId" keys that have a 2-hr lecture
+        for (const s of slots) {
+            if (s.slot_type !== 'Lecture') continue;
+            const startIdx0 = SLOT_START_TIMES.indexOf(s.start_time.slice(0, 5));
+            const endIdx0 = SLOT_END_TIMES.indexOf(s.end_time.slice(0, 5));
+            const dur0 = Math.max(1, endIdx0 - startIdx0 + 1);
+            if (dur0 >= 2) lectureDoubleSet.add(`${s.subject_id}|${s.student_group_id}`);
+        }
+
         const sessions = slots.map((s, i) => {
             const startIdx = SLOT_START_TIMES.indexOf(s.start_time.slice(0, 5));
             const endIdx = SLOT_END_TIMES.indexOf(s.end_time.slice(0, 5));
             const duration = Math.max(1, endIdx - startIdx + 1);
             const isElective = s.subject_type === 'Elective' || s.subject_type === 'Minor';
             const profIsUnknown = s.professor_name === 'Unknown' || s.professor_name === 'TBD';
+
+            // Infer lecturePairIndex from duration + whether a 2-hr sibling exists
+            let lecturePairIndex = -2;
+            if (s.slot_type === 'Lecture' && !isElective) {
+                if (duration >= 2) {
+                    lecturePairIndex = 0;  // this IS the double-lecture block
+                } else if (lectureDoubleSet.has(`${s.subject_id}|${s.student_group_id}`)) {
+                    lecturePairIndex = -1; // a remainder 1-hr slot (2-hr sibling exists)
+                }
+            }
+
             return {
                 id: i, subjectId: s.subject_id, subjectCode: s.subject_code,
                 groupId: s.student_group_id, professorId: profIsUnknown ? '' : (s.professor_id ?? ''),
                 duration, slotType: s.slot_type as 'Lecture' | 'Tutorial' | 'Practical',
+                // NOTE: homeRoomIndex = current room, not the *intended* home room.
+                // countHomeRoomViolations() will always return 0 here — this is
+                // a known limitation (home room metadata isn't stored in timetable_slots).
                 homeRoomIndex: s.room_id ? (roomIdToIndex.get(s.room_id) ?? 0) : 0,
                 isElective, electiveSlotIndex: isElective ? 0 : -1,
-                basketName: null, // feasibility check doesn't use basket constraints
+                // NOTE: basketName cannot be inferred from slot data — elective sync
+                // violations (countElectiveSyncViolations) will not fire in the editor.
+                basketName: null,
                 isWMCGroup: s.group_name === 'WMC' || /IT[\s-]*BI/i.test(s.group_name ?? ''),
+                lecturePairIndex,
             };
         });
 
@@ -340,12 +373,31 @@ export function EditorView({ initialTimetableId, onBack }: EditorViewProps) {
         const roomIdToIndex = new Map<string, number>();
         roomList.forEach((r, i) => roomIdToIndex.set(r.id, i));
 
+        // ── 2+1 lecturePairIndex inference (same logic as feasibility check) ────
+        const lectureDoubleSetLns = new Set<string>();
+        for (const s of slots) {
+            if (s.slot_type !== 'Lecture') continue;
+            const si = SLOT_START_TIMES.indexOf(s.start_time.slice(0, 5));
+            const ei = SLOT_END_TIMES.indexOf(s.end_time.slice(0, 5));
+            if (Math.max(1, ei - si + 1) >= 2) lectureDoubleSetLns.add(`${s.subject_id}|${s.student_group_id}`);
+        }
+
         const sessions = slots.map((s, i) => {
             const startIdx = SLOT_START_TIMES.indexOf(s.start_time.slice(0, 5));
             const endIdx = SLOT_END_TIMES.indexOf(s.end_time.slice(0, 5));
             const duration = Math.max(1, endIdx - startIdx + 1);
             const isElective = s.subject_type === 'Elective' || s.subject_type === 'Minor';
             const profIsUnknown = s.professor_name === 'Unknown' || s.professor_name === 'TBD';
+
+            let lecturePairIndex = -2;
+            if (s.slot_type === 'Lecture' && !isElective) {
+                if (duration >= 2) {
+                    lecturePairIndex = 0;
+                } else if (lectureDoubleSetLns.has(`${s.subject_id}|${s.student_group_id}`)) {
+                    lecturePairIndex = -1;
+                }
+            }
+
             return {
                 id: i, subjectId: s.subject_id, subjectCode: s.subject_code,
                 groupId: s.student_group_id, professorId: profIsUnknown ? '' : (s.professor_id ?? ''),
@@ -354,6 +406,7 @@ export function EditorView({ initialTimetableId, onBack }: EditorViewProps) {
                 isElective, electiveSlotIndex: isElective ? 0 : -1,
                 basketName: null,
                 isWMCGroup: s.group_name === 'WMC' || /IT[\s-]*BI/i.test(s.group_name ?? ''),
+                lecturePairIndex,
             };
         });
 
@@ -777,6 +830,7 @@ export function EditorView({ initialTimetableId, onBack }: EditorViewProps) {
                     labRoom: { label: 'Lab Room', icon: '🔬', color: 'bg-amber-100 text-amber-700 border-amber-200', explanation: 'A practical/lab session is assigned to a non-lab room. Change the room to a Lab.' },
                     wmcSectionOverlap: { label: 'WMC–Section Overlap', icon: '⚡', color: 'bg-teal-100 text-teal-700 border-teal-200', explanation: 'A whole-batch (WMC) class overlaps with a section-level class. Move one so they don\'t collide.' },
                     homeRoom: { label: 'Home Room', icon: '🏠', color: 'bg-yellow-100 text-yellow-700 border-yellow-200', explanation: 'A lecture/tutorial is not in its assigned home room. Change the room back to the section\'s home room.' },
+                    twoOneLecture: { label: '2+1 Lecture Format', icon: '📚', color: 'bg-blue-100 text-blue-700 border-blue-200', explanation: 'Two lecture sessions for the same subject are on the same day. The 2-hour block and the 1-hour slot must be on different days.' },
                 };
                 const active = Object.entries(bd).filter(([, v]) => v > 0);
                 if (active.length === 0) return null;

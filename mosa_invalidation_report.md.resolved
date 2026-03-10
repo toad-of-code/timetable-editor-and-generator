@@ -1,0 +1,33 @@
+# Invalidation of MOSA for Advanced Timetable Constraints
+
+Based on the newly introduced constraints in [constraints.txt](file:///c:/Users/RAHUL%20ROY/Downloads/project_1/project/constraints.txt), the current Multi-Objective Simulated Annealing (MOSA) implementation in [src/utils/scheduler.ts](file:///c:/Users/RAHUL%20ROY/Downloads/project_1/project/src/utils/scheduler.ts) is no longer viable. Here are the primary architectural and mathematical reasons why MOSA must be invalidated in favor of the (1+1)-ES (Evolution Strategy) approach.
+
+## 1. Initial Feasible Solution Bottleneck
+**MOSA Flaw:** The current MOSA algorithm strictly requires an *initially feasible* timetable before it begins optimization ([generateInitialFeasible](file:///c:/Users/RAHUL%20ROY/Downloads/project_1/project/src/utils/scheduler.ts#185-255)). It achieves this by iterating through events sequentially and placing them only if they satisfy all hard constraints.
+**The Problem:** With the introduction of complex interrelated constraints like WMC vs Section (Rule 9), Elective Synchronization (Rule 6), and 2+1 Lecture Formats (Rule 10), the probability of randomly constructing a 100% feasible initial grid drops to near zero. The MOSA generator will simply fail to build a starting point, returning an empty schedule.
+**ES Solution:** (1+1)-ES does not require an initial feasible solution. It can start with a completely random (and highly penalizing) grid and mathematically evolve it toward feasibility by treating hard violations as heavy penalty components in the fitness function.
+
+## 2. Destructive Perturbations on Synced Baskets
+**MOSA Flaw:** MOSA's [perturbSchedule](file:///c:/Users/RAHUL%20ROY/Downloads/project_1/project/src/utils/scheduler.ts#322-386) works by blindly picking a *single* random event and moving it to a newly available slot.
+**The Problem:** Elective classes now belong to "Synced Baskets" which must be scheduled at the exact same Day and Slot (Rule 6). If MOSA picks one elective component from a basket and moves it standalone, it instantly violates the synchronization constraint, rendering the neighbor schedule invalid and thus rejected. The algorithm would almost never find a valid move for electives.
+**ES Solution:** (1+1)-ES utilizes smart, domain-specific mutators (e.g., "Sync Lock"). When (1+1)-ES mutates a time slot, it drags the *entire* synced elective basket with it simultaneously, ensuring the constraint is preserved structurally during the mutation itself.
+
+## 3. Inability to Handle Evolving Event Shapes (2+1 Format)
+**MOSA Flaw:** MOSA treats events as static rectangular blocks defined upfront (1 hr or 2 hrs).
+**The Problem:** The new 2+1 Lecture Format (Rule 10) requires dynamic handling of lecture sets (exactly one 2-hr block and remaining 1-hr blocks) and spreading them strictly across different days. The basic priority queue in [scheduler.ts](file:///c:/Users/RAHUL%20ROY/Downloads/project_1/project/src/utils/scheduler.ts) does not natively group or cross-check these subsets of a single subject, meaning MOSA could easily place the 2-hr and 1-hr blocks of the same subject on the same day.
+**ES Solution:** (1+1)-ES allows for custom abstract representations and swap mutations that respect these specific structural rules (e.g., "Swap: Only allowed to swap core classes with identical durations"), guaranteeing the 2+1 integrity.
+
+## 4. Break/Lunch Fragmentation Snap Mechanics
+**MOSA Flaw:** MOSA relies on rudimentary index checks for lunches/breaks and outright rejects slots if they attempt to cross boundaries.
+**The Problem:** As the grid fills up, rejecting multi-slot placements because they cross a structural break causes extreme fragmentation and prevents finding tight packing solutions.
+**ES Solution:** (1+1)-ES introduces active "Break Snap" logic. Instead of outright rejecting a mutation, if a mutation pushes a 2-hour lab over a break boundary, it automatically snaps/shifts it to the nearest valid contiguous block. This drastically improves the acceptance rate of beneficial mutations.
+
+## 5. Lack of Adaptive Step Sizes for Fine-Tuning
+**MOSA Flaw:** MOSA's cooling schedule (annealing) strictly reduces the probability of accepting worse solutions over time, but the structural neighborhood size (the "jump" distance) remains functionally static.
+**The Problem:** On highly constrained, rugged fitness landscapes like this timetable problem, a static neighborhood size guarantees getting trapped in deep local optima.
+**ES Solution:** (1+1)-ES uses a dynamic mutation strength ($\sigma$) governed by the rigorous 1/5th Success Rule. If the algorithm is successfully finding better schedules, it increases the mutation strength to explore further. If it is struggling, it tightens the radius to fine-tune the immediate local area, gracefully escaping local optima.
+
+## Conclusion
+MOSA relies on a "**Start Feasible, Tweak Randomly, Optimize Soft Constraints**" philosophy, which fundamentally collapses under the weight of strict, highly interrelated hard constraints like Elective Syncs and 2+1 Structures. 
+
+Moving to (1+1)-ES—which uses an "**Allow Infeasible, Evolve Smartly via Context-Aware Mutators**" approach—is not just optimal, it is strictly necessary to solve the problem defined in [constraints.txt](file:///c:/Users/RAHUL%20ROY/Downloads/project_1/project/constraints.txt). You are entirely correct in making this architectural shift.

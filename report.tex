@@ -1,0 +1,182 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{tabularx}
+\usepackage{booktabs}
+\usepackage{ragged2e}
+\usepackage{amsmath}
+
+\title{Automated University Timetabling System:\\ A Web-Based Evolution Strategy Approach}
+\author{}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+This report outlines the development and implementation of an automated university timetabling system designed to handle high-density scheduling constraints. The system integrates a React-based administrative interface with a client-side mathematical solver using an Evolution Strategy.
+\end{abstract}
+
+\section*{Chapter 1: Introduction}
+
+\subsection*{1.1 Overview}
+University timetabling is a resource-constrained optimization problem where subjects, professors, and student batches must be allocated to a limited number of rooms and time slots. The problem is classified as NP-Hard due to the exponential growth of potential configurations as the number of constraints increases.
+
+\subsection*{1.2 Problem Statement}
+Manual scheduling is prone to overlaps and often fails to optimize for specific institutional requirements, such as:
+\begin{itemize}
+    \item Synchronized elective baskets where multiple subjects must run simultaneously.
+    \item Home-room requirements for core lecture and tutorial sessions.
+    \item Variable session durations (2-hour vs. 1-hour blocks).
+\end{itemize}
+
+\subsection*{1.3 Aim and Scope}
+The aim of this project is to build a conflict-free, automated generator that allows for manual adjustments via a web interface. The scope includes a digital data pipeline for institutional rules, a React/Supabase management system, and a browser-based metaheuristic solver.
+
+\subsection*{1.4 Significant Contributions}
+\begin{itemize}
+    \item \textbf{Browser-Based Optimization:} A solver that executes tens of thousands of iterations in the client's browser without external server compute.
+    \item \textbf{Adaptive Variance:} Implementation of the $1/5$th Success Rule to adjust search intensity dynamically.
+    \item \textbf{Session Chunking:} A pre-processor that translates credit hours into efficient teaching blocks ($3L \rightarrow 2+1$).
+\end{itemize}
+
+\vspace{5mm}
+\hrule
+\vspace{5mm}
+
+\section*{Chapter 2: Review of Literature}
+
+\begin{table}[htbp]
+    \centering
+    \caption{Comparison of Timetabling Methods and Techniques}
+    \vspace{2mm}
+    \small 
+    \begin{tabularx}{\textwidth}{|>{\RaggedRight\arraybackslash}p{2.5cm}|>{\RaggedRight\arraybackslash}X|>{\RaggedRight\arraybackslash}X|>{\RaggedRight\arraybackslash}X|>{\RaggedRight\arraybackslash}p{2.5cm}|}
+        \hline
+        \textbf{Method / Technique} & \textbf{Key Idea} & \textbf{Advantages (from Literature)} & \textbf{Limitations Observed} & \textbf{Reference} \\ \hline
+        
+        \textbf{Genetic Algorithm (GA)} & 
+        Represents timetables as chromosomes and evolves them using crossover and mutation operators to minimize constraint violations. & 
+        • Explores a large search space \par • Widely used for timetabling problems \par • Capable of improving solutions over generations & 
+        • Crossover often breaks important schedule structures (e.g., labs, shared lectures) \par • Requires complex repair mechanisms to fix invalid schedules \par • High computational cost due to large population evaluations & 
+        Burke et al., \textit{Genetic Algorithm Based University Timetabling} \\ \hline
+        
+        \textbf{Multi-Objective Simulated Annealing (MOSA)} & 
+        Uses simulated annealing to optimize multiple objectives simultaneously such as timetable quality and robustness. & 
+        • Can escape local optima \par • Handles multiple objectives \par • Allows evaluation of timetable robustness & 
+        • Robustness evaluation requires expensive repair simulations \par • Slow convergence for large datasets \par • Some move operations temporarily violate strict constraints & 
+        Gülcü \& Akkan, \textit{Robustness in University Course Timetabling} \\ \hline
+        
+        \textbf{Evolution Strategy (1+1-ES)} & 
+        Maintains a single timetable solution and iteratively improves it using mutation-based modifications. A new solution replaces the current one only if it improves the objective value. & 
+        • Avoids destructive crossover \par • Lower computational cost (evaluates only one candidate per iteration) \par • Mutations can be designed to preserve timetable constraints & 
+        • Requires careful design of mutation operators to avoid local optima & 
+        Srivastava et al., \textit{Evolution Strategy Based Scheduling Optimization} \\ \hline
+        
+        \textbf{Improved Evolution Strategy with Preprocessing} & 
+        Combines ES with preprocessing techniques and structured mutation strategies to improve convergence speed. & 
+        • Faster convergence \par • Better exploration of search space \par • Produces high-quality schedules with fewer conflicts & 
+        • Implementation complexity slightly higher due to preprocessing stage & 
+        Srivastava et al., \textit{Enhanced Evolution Strategy for Scheduling Problems} \\ \hline
+    \end{tabularx}
+\end{table}
+
+\subsection*{2.1 The Failure of Multi-Objective Simulated Annealing (MOSA)}
+In previous investigations, an attempt was made to solve this problem using Multi-Objective Simulated Annealing (MOSA). While the core theoretical idea of MOSA was successfully implemented, it fundamentally collapsed when applied to the highly-densified constraints of our college timetable. The algorithm failed to reach near-optimal solutions due to a combination of theoretical and technical flaws:
+
+\begin{enumerate}
+    \item \textbf{Neighborhood Search Limitations (The "Empty Slot" Trap):} College timetables are extremely dense (often $> 85\%$ utilization). Our initial mutation function attempted to move classes by searching for empty slots. Because we did not implement complex 'swapping' logic, the algorithm physically could not move classes in a dense grid and became permanently stuck.
+    \item \textbf{The Cooling Schedule vs. Penalty Scaling Mismatch:} The penalty constraints applied to hard clashes were massive (e.g., 1,000 points), but the Initial Temperature was set too low. In the Metropolis acceptance criterion ($e^{-\Delta E / T}$), this meant the probability of accepting a worse state to escape a local minimum was effectively zero. The SA degraded into a weak greedy-search and froze instantly.
+    \item \textbf{Flawed Multi-Objective Trade-offs:} When balancing our two objectives (Hard Clashes vs. Robustness), if a newly mutated schedule improved one objective but worsened the other, the code fell back on a 50\% random coin toss ($Math.random() < 0.5$) to decide whether to accept or reject the new schedule. Because we did not calculate a proper mathematical Pareto-front, this random acceptance completely destroyed the algorithm's ability to learn across competing objectives.
+    \item \textbf{Constraint Destruction (The Theoretical Gap):} MOSA inherently assumes events are independent. However, our problem requires explicitly handling highly interrelated cases, such as \textbf{Synced Elective Baskets} (where multiple subjects must move simultaneously). The rigid, probabilistic nature of MOSA often dismantled these hard-won synchronized blocks during random perturbations.
+    \item \textbf{Complex Rule Formulation:} The project's rules are highly interconnected---for example, breaking a 3-hour class into a $2+1$ format across different days while preventing section/WMC overlaps. It proved mathematically and programmatically intractable to translate these complex rules into MOSA's rigid objective function.
+\end{enumerate}
+
+\subsection*{2.2 The Shift to (1+1)-Evolution Strategies (ES)}
+To overcome these limitations, we engineered a practical pivot to a (1+1)-Evolution Strategy. This architectural shift allowed us to drastically simplify our data representation: by pre-chunking sessions (handling the $2+1$ splits upfront), the problem instance became significantly easier to manage and integrate.
+
+Unlike population-based GAs, $(1+1)$-ES holds only one parent and one offspring, making it memory-light for browser execution. Crucially, we implemented Rechenberg’s \textbf{1/5th Success Rule} to manage the local minima problem natively. (Note: This rule is specific to Evolution Strategies, not MOSA). It acts as an adaptive variance controller, scaling search intensity without relying on brittle cooling schedules, allowing the solver to maintain constraint integrity through strict elitism.
+
+\vspace{3mm}
+\noindent\textbf{The Decision to Drop the "Robustness" Objective}\\
+In the old MOSA system, we tried to mathematically guarantee "Robustness"---making sure the schedule wouldn't completely collapse if a professor got sick or a room changed at the last minute. When we built the (1+1)-ES, we purposely threw this goal out for three practical reasons:
+\begin{enumerate}
+    \item \textbf{Computational Intractability ($O(N^2)$ Overhead):} Checking robustness means the computer has to run expensive, nested "what-if" disaster simulations for every single schedule it generates. In a browser-based JavaScript environment, this $O(N^2)$ overhead slows the generation process to a crawl, defeating the purpose of a fast client-side solver.
+    \item \textbf{Dense Grids Can't Be Robust:} When 85\% of your college rooms are full, true robustness is physically impossible. If one thing changes, it \textit{will} cause a domino effect because there is simply no empty space to shift classes into. It’s a waste of computing power to search for a "safe" layout that doesn't exist.
+    \item \textbf{The Human Element:} Instead of forcing the math engine to guess future problems, we solved robustness using our React-based Editor UI. If a schedule breaks in real life, human administrators can now use the interactive grid's clash-detection and Large Neighbourhood Search (LNS) Auto-Fix buttons to instantly repair the damage on the fly.
+\end{enumerate}
+
+\vspace{5mm}
+\hrule
+\vspace{5mm}
+
+\section*{Chapter 3: Methodology and System Design}
+
+\subsection*{3.1 System Design}
+The architecture is a three-tier system:
+\begin{itemize}
+    \item \textbf{Database (Supabase):} Stores Professors, Rooms, Groups, and Subject L-T-P counts.
+    \item \textbf{Frontend (React/TypeScript):} An interface for HODs to map professors to subjects and sections.
+    \item \textbf{Solver (Client-Side):} An asynchronous engine that runs the optimization loop in the background of the browser.
+\end{itemize}
+
+\subsection*{3.2 Data Pre-processing: Session Chunking}
+To improve teaching effectiveness and reduce variable complexity, the system processes raw lecture hours ($L$) into chunks:
+\begin{itemize}
+    \item \textbf{$L = 3$}: One 2-hour contiguous block and one 1-hour block.
+    \item \textbf{$L = 2$}: One 2-hour contiguous block.
+    \item \textbf{Practicals ($P$)}: One 2-hour contiguous block assigned to a Lab room domain.
+\end{itemize}
+
+\subsection*{3.3 The (1+1)-Evolution Strategy Algorithm}
+The engine follows an iterative loop to minimize a total penalty score $P(S)$.
+
+\begin{enumerate}
+    \item \textbf{Initialization:} Initializes using a seed timetable ($S_{parent}$) and calculates its penalty.
+    \item \textbf{Mutation ($\sigma$):} A Child ($S_{child}$) is created by selecting a subset of mutable sessions and applying one of five distinct mutation operators governed by the variance $\sigma$:
+    \begin{itemize}
+        \item \textbf{Mutate Day:} Shifts the session to a random new day while keeping the time slot and room intact.
+        \item \textbf{Mutate Time:} Applies Gaussian noise scaled by $\sigma$ to shift the start slot (snapping to valid, non-break positions).
+        \item \textbf{Mutate Room:} Reassigns the room, explicitly respecting Lab vs. Lecture domain requirements.
+        \item \textbf{Relocate (Global Jump):} Acts as a macro-mutation to escape local optima by moving the session to a completely new, random valid configuration of Day, Time, and Room (while strictly respecting break boundaries and Lab/Lecture room requirements).
+        \item \textbf{Swap:} Trades places between two non-elective sessions of equal duration.
+    \end{itemize}
+    \textit{(Crucially, any time-based mutation applied to an elective subject automatically forces the entire synced basket to move with it, preserving the constraint).}
+    \item \textbf{Selection:} The Child replaces the Parent only if $P(S_{child}) \leq P(S_{parent})$. This elitism protects hard constraints.
+    \item \textbf{1/5th Success Rule:} Every 50 iterations, the success rate is checked:
+    \begin{itemize}
+        \item If $> 20\%$ success: $\sigma = \sigma \times 1.22$ (Search wider).
+        \item If $< 20\%$ success: $\sigma = \sigma \times 0.82$ (Search finer).
+    \end{itemize}
+    \item \textbf{Stagnation Recovery:} If the solver fails to find a better solution for $15,000$ consecutive generations, it assumes it is trapped in a deep local optimum. It triggers a hard reset by generating a completely new initial timetable (while preserving any manually locked or pinned UI classes). The tracking variance ($\sigma$) is reset to its starting value, but the global best timetable found so far is kept safe in memory to prevent regression.
+\end{enumerate}
+
+\subsection*{3.4 Mathematical Formulation of Constraints}
+The solver evaluates fitness through a objective function:
+
+\begin{equation}
+P(S) = \sum (W_{hard} \times C_{hard}) + \sum (W_{soft} \times C_{soft})
+\end{equation}
+
+\textbf{Hard Constraints ($W_{hard} = 1000$):}
+\begin{itemize}
+    \item \textbf{Time boundaries \& Breaks:} Sessions cannot cross end-of-day slots or designated lunch/break boundaries.
+    \item \textbf{Room Overlap:} A physical room can host at most one session at any given time slot.
+    \item \textbf{Professor Overlap:} A professor can teach at most one class session at any given time slot.
+    \item \textbf{Student Group Overlap:} A student group can attend at most one session at a time (exempting concurrent choices within synced elective baskets).
+    \item \textbf{Elective Sync:} Synced baskets must run concurrently; different baskets cannot overlap for the same group.
+    \item \textbf{WMC vs Section:} Whole-Batch (WMC) classes strictly cannot overlap with section-level classes.
+    \item \textbf{2+1 Lecture Spread:} Multiple lecture periods for the same core subject must be strictly spread out across different days.
+    \item \textbf{Home Room \& Labs:} Non-practical core sessions must use assigned home rooms; practicals require Lab rooms.
+\end{itemize}
+
+\textbf{Soft Constraints ($W_{soft} = 1.0$):}
+\begin{itemize}
+    \item \textbf{Idle Gaps:} Minimizing empty slots between classes for students and faculty to provide contiguous schedules.
+\end{itemize}
+
+\subsection*{3.5 Implementation Status}
+The implementation successfully manages the L-T-P chunking and the $(1+1)$-ES loop. The system resolves hard conflicts in high-density scenarios where previous implementations failed, specifically maintaining the integrity of synchronized elective blocks through elitist selection.
+
+\end{document}

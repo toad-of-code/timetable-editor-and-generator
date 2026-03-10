@@ -107,6 +107,53 @@ export function GeneratorView() {
     const getDefaultMode = (sub: { subject_type: string }): 'all' | 'sections' =>
         (sub.subject_type === 'Elective' || sub.subject_type === 'Minor') ? 'all' : 'sections';
 
+    // ─── Floor Home Room Policy ───────────────────────────────────────────────
+    // Rooms follow the naming pattern CC-3-5xyy where:
+    //   x   = floor digit derived from semester: sem 1-2 → 0, sem 3-4 → 1, sem 5-6 → 2
+    //   yy  = section suffix: A → 06, B → 07, C → 54, D → 55
+    // Example: Sem 3, Section B → CC-3-5107
+
+    const SECTION_ROOM_SUFFIX: Record<string, string> = { A: '06', B: '07', C: '54', D: '55' };
+
+    function getFloorDigit(semester: number): string {
+        if (semester <= 2) return '0';
+        if (semester <= 4) return '1';
+        return '2';
+    }
+
+    /** Extract section letter (A-D) from a group name — e.g. "Sec A", "IT-B", "C" → A/B/C/D */
+    function getSectionLetter(groupName: string): string | null {
+        const m = groupName.match(/\b([A-D])\b/i);
+        return m ? m[1].toUpperCase() : null;
+    }
+
+    /** Build homeRooms map using the floor policy. Returns only the entries that could be matched. */
+    const buildFloorHomeRooms = useCallback((): Record<string, string> => {
+        const cluster = clusters.find(c => c.id === selectedClusterId);
+        if (!cluster) return {};
+        const floor = getFloorDigit(cluster.semester_number);
+        const result: Record<string, string> = {};
+        for (const group of clusterGroups) {
+            if (group.name === 'WMC' || isITBIGroup(group.name)) continue;
+            const letter = getSectionLetter(group.name);
+            const suffix = letter ? SECTION_ROOM_SUFFIX[letter] : null;
+            if (!suffix) continue;
+            const targetName = `CC-3-5${floor}${suffix}`;
+            const room = rooms.find(r => r.name === targetName);
+            if (room) result[group.id] = room.id;
+        }
+        return result;
+    }, [clusters, selectedClusterId, clusterGroups, rooms]);
+
+    // Auto-apply floor home rooms whenever a cluster + its data finishes loading
+    useEffect(() => {
+        if (!selectedClusterId || fetchingDetails || clusterGroups.length === 0 || rooms.length === 0) return;
+        const floorRooms = buildFloorHomeRooms();
+        if (Object.keys(floorRooms).length > 0) {
+            setHomeRooms(prev => ({ ...prev, ...floorRooms }));
+        }
+    }, [selectedClusterId, fetchingDetails, clusterGroups, rooms, buildFloorHomeRooms]);
+
     // ─── DX: Auto-fill ────────────────────────────────────────────────────────
     const handleAutoFill = useCallback(() => {
         if (professors.length === 0) return;
@@ -115,9 +162,13 @@ export function GeneratorView() {
         const sectionGroups = allGroups.filter(g => !isITBIGroup(g.name));
         const allGroup = clusterGroups.find(g => g.name === 'WMC');
 
-        const newHomeRooms: Record<string, string> = {};
+        // Use floor policy home rooms — fall back to round-robin if no match found
+        const floorRooms = buildFloorHomeRooms();
         const lectureRooms = rooms.filter(r => r.room_type === 'Lecture');
-        allGroups.forEach((g, i) => { newHomeRooms[g.id] = lectureRooms[i % lectureRooms.length]?.id ?? ''; });
+        const newHomeRooms: Record<string, string> = {};
+        allGroups.forEach((g, i) => {
+            newHomeRooms[g.id] = floorRooms[g.id] ?? lectureRooms[i % lectureRooms.length]?.id ?? '';
+        });
 
         // Set mode: use existing mode or smart default (electives → WMC)
         const newModes: Record<string, 'all' | 'sections' | 'itbi'> = {};

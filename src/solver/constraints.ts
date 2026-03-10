@@ -369,6 +369,52 @@ function countHomeRoomViolations(sessions: ClassSession[], solution: Solution): 
 }
 
 /**
+ * Constraint: 2+1 Lecture Format.
+ *
+ * For each (subjectId, groupId) with core (non-elective) lectures,
+ * the sessions are split into:
+ *   - ONE double-lecture block (lecturePairIndex = 0, duration = 2)
+ *   - Zero or more single-lecture slots (lecturePairIndex = -1, duration = 1)
+ *
+ * Rule: The double-lecture and any single-lectures for the same
+ * subject+group MUST be on different days.
+ * A violation occurs any time two lecture sessions for the same subject+group
+ * are placed on the same day (regardless of whether one is the double-block).
+ */
+function countTwoOneLectureViolations(sessions: ClassSession[], solution: Solution): number {
+    // Gather lecture sessions per (subjectId, groupId) that participate in 2+1
+    // (lecturePairIndex >= 0 means double-block; -1 means single remainder; skip -2)
+    const groupMap = new Map<string, number[]>(); // key → session indices
+
+    for (let i = 0; i < sessions.length; i++) {
+        const s = sessions[i];
+        if (s.isLocked) continue;
+        if (s.slotType !== 'Lecture') continue;
+        if (s.lecturePairIndex === -2) continue; // elective or 1-lecture subject — no rule applies
+
+        const key = `${s.subjectId}|${s.groupId}`;
+        const arr = groupMap.get(key) ?? [];
+        arr.push(i);
+        groupMap.set(key, arr);
+    }
+
+    let violations = 0;
+    for (const indices of groupMap.values()) {
+        if (indices.length <= 1) continue;
+        // Count how many lecture sessions share the same day
+        const dayCount = new Map<number, number>();
+        for (const idx of indices) {
+            const d = solution[idx].day;
+            dayCount.set(d, (dayCount.get(d) ?? 0) + 1);
+        }
+        for (const count of dayCount.values()) {
+            if (count > 1) violations += count - 1; // each extra session on same day = 1 violation
+        }
+    }
+    return violations;
+}
+
+/**
  * Evaluate a complete solution against all constraints.
  * fitness.total = hardViolations * hardPenalty + gapPenalty * gapWeight
  */
@@ -384,10 +430,11 @@ export function evaluate(input: SolverInput, solution: Solution): FitnessResult 
     const labRoom = countLabRoomViolations(sessions, solution, rooms);
     const wmcSectionOverlap = countWMCSectionOverlaps(sessions, solution);
     const homeRoom = countHomeRoomViolations(sessions, solution);
+    const twoOneLecture = countTwoOneLectureViolations(sessions, solution);
 
     const hardViolations = timeBoundary + breakCrossing + roomOverlap +
         professorOverlap + groupOverlap + electiveSync + labRoom +
-        wmcSectionOverlap + homeRoom;
+        wmcSectionOverlap + homeRoom + twoOneLecture;
 
     const gapPenalty = computeGapPenalty(sessions, solution, numDays);
 
@@ -407,6 +454,7 @@ export function evaluate(input: SolverInput, solution: Solution): FitnessResult 
             labRoom,
             wmcSectionOverlap,
             homeRoom,
+            twoOneLecture,
         },
     };
 }

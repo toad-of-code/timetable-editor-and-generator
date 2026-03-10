@@ -53,6 +53,13 @@ export const LECTURE_DURATION = 1;
 export const TUTORIAL_DURATION = 1;
 
 /**
+ * Duration for the double-lecture block in the 2+1 format.
+ * When a subject has lectures >= 2, exactly ONE session of this duration is created,
+ * and any remaining lecture hours become individual LECTURE_DURATION sessions.
+ */
+export const DOUBLE_LECTURE_DURATION = 2;
+
+/**
  * Default practical duration: 2 hours = 2 slots.
  * Use Math.ceil(subject.practical_duration / 60) for the actual value.
  */

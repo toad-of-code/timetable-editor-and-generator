@@ -1,5 +1,5 @@
 import type { ClassSession, SolverInput, Gene, Solution } from './types';
-import { LECTURE_DURATION, TUTORIAL_DURATION, NUM_DAYS, SLOTS_PER_DAY, DEFAULT_SOLVER_CONFIG, timeToSlot } from './constants';
+import { LECTURE_DURATION, DOUBLE_LECTURE_DURATION, TUTORIAL_DURATION, NUM_DAYS, SLOTS_PER_DAY, DEFAULT_SOLVER_CONFIG, timeToSlot } from './constants';
 import { generateInitialSolution } from './mutations';
 import type { Subject, Group, Room } from '../hooks/useGeneratorData';
 
@@ -61,23 +61,73 @@ export function prepareSolverInput(
 
             const homeRoomId = homeRooms[group.id] ?? '';
             const homeRoomIndex = roomIndexMap.get(homeRoomId) ?? 0;
+            const isWMCGroup = group.name === 'WMC' || /IT[\s-]*BI/i.test(group.name);
 
-            // Expand Lectures: each lecture = 1 slot (1 hour)
-            for (let l = 0; l < (subject.lectures ?? 0); l++) {
+            // ── 2+1 Lecture Expansion ────────────────────────────────────────────
+            // For non-elective core lectures ONLY:
+            //   lectures=1 → one 1-hour session
+            //   lectures=2 → one 2-hour double-lecture
+            //   lectures=3 → one 2-hour double-lecture + one 1-hour session
+            //   lectures=4 → one 2-hour double-lecture + two 1-hour sessions
+            //   (i.e., always exactly ONE 2-hr block, rest are 1-hr singles)
+            // For electives, each lecture is a separate 1-hour session (unchanged).
+            const numLectures = subject.lectures ?? 0;
+
+            if (!isElective && numLectures >= 2) {
+                // The one double-lecture block (2-hour)
                 sessions.push({
                     id: sessionId++,
                     subjectId: subject.id,
                     subjectCode: subject.code,
                     groupId: group.id,
                     professorId,
-                    duration: LECTURE_DURATION,
+                    duration: DOUBLE_LECTURE_DURATION,
                     slotType: 'Lecture',
                     homeRoomIndex,
-                    isElective,
-                    electiveSlotIndex: isElective ? l : -1,
-                    basketName: isElective ? (subject.elective_basket ?? null) : null,
-                    isWMCGroup: group.name === 'WMC' || /IT[\s-]*BI/i.test(group.name),
+                    isElective: false,
+                    electiveSlotIndex: -1,
+                    basketName: null,
+                    isWMCGroup,
+                    lecturePairIndex: 0, // the double-lecture block
                 });
+
+                // Remaining single-lecture slots (lectures - 2)
+                for (let l = 0; l < numLectures - 2; l++) {
+                    sessions.push({
+                        id: sessionId++,
+                        subjectId: subject.id,
+                        subjectCode: subject.code,
+                        groupId: group.id,
+                        professorId,
+                        duration: LECTURE_DURATION,
+                        slotType: 'Lecture',
+                        homeRoomIndex,
+                        isElective: false,
+                        electiveSlotIndex: -1,
+                        basketName: null,
+                        isWMCGroup,
+                        lecturePairIndex: -1, // remainder single-lecture slot
+                    });
+                }
+            } else {
+                // lectures=1 or elective: create individual 1-hour sessions (unchanged)
+                for (let l = 0; l < numLectures; l++) {
+                    sessions.push({
+                        id: sessionId++,
+                        subjectId: subject.id,
+                        subjectCode: subject.code,
+                        groupId: group.id,
+                        professorId,
+                        duration: LECTURE_DURATION,
+                        slotType: 'Lecture',
+                        homeRoomIndex,
+                        isElective,
+                        electiveSlotIndex: isElective ? l : -1,
+                        basketName: isElective ? (subject.elective_basket ?? null) : null,
+                        isWMCGroup,
+                        lecturePairIndex: -2, // not applicable
+                    });
+                }
             }
 
             // Expand Tutorials: each tutorial = 1 slot (1 hour)
@@ -94,7 +144,8 @@ export function prepareSolverInput(
                     isElective,
                     electiveSlotIndex: isElective ? t : -1,
                     basketName: isElective ? (subject.elective_basket ?? null) : null,
-                    isWMCGroup: group.name === 'WMC' || /IT[\s-]*BI/i.test(group.name),
+                    isWMCGroup,
+                    lecturePairIndex: -2, // not applicable
                 });
             }
 
@@ -117,7 +168,8 @@ export function prepareSolverInput(
                     isElective,
                     electiveSlotIndex: isElective ? p : -1,
                     basketName: isElective ? (subject.elective_basket ?? null) : null,
-                    isWMCGroup: group.name === 'WMC' || /IT[\s-]*BI/i.test(group.name),
+                    isWMCGroup,
+                    lecturePairIndex: -2, // not applicable
                 });
             }
         }
@@ -131,6 +183,10 @@ export function prepareSolverInput(
         config: { ...DEFAULT_SOLVER_CONFIG },
     };
 }
+
+
+// ─── Extended Subject type (with L-T-P fields from DB) ─────────────────────────
+// The hook's Subject type is updated to include these fields.
 
 // ─── Seed Solution from Existing Timetable ─────────────────────────────────────
 
@@ -272,6 +328,7 @@ export function buildLockedSessions(
             basketName: null, // locked sessions don't participate in basket constraints
             isWMCGroup: slot.group_name === 'WMC' || /IT[\s-]*BI/i.test(slot.group_name ?? ''),
             isLocked: true,
+            lecturePairIndex: -2, // locked sessions are not subject to 2+1 format
         });
 
         genes.push({

@@ -1,0 +1,45 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{tabularx}
+\usepackage{booktabs}
+\usepackage{ragged2e}
+
+\begin{document}
+
+\begin{table}[htbp]
+    \centering
+    \caption{Comparison of Timetabling Methods and Techniques}
+    \vspace{2mm}
+    \small % Reducing font size slightly to ensure it fits comfortably
+    \begin{tabularx}{\textwidth}{|>{\RaggedRight\arraybackslash}p{2.5cm}|>{\RaggedRight\arraybackslash}X|>{\RaggedRight\arraybackslash}X|>{\RaggedRight\arraybackslash}X|>{\RaggedRight\arraybackslash}p{2.5cm}|}
+        \hline
+        \textbf{Method / Technique} & \textbf{Key Idea} & \textbf{Advantages (from Literature)} & \textbf{Limitations Observed} & \textbf{Reference} \\ \hline
+        
+        \textbf{Genetic Algorithm (GA)} & 
+        Represents timetables as chromosomes and evolves them using crossover and mutation operators to minimize constraint violations. & 
+        • Explores a large search space \par • Widely used for timetabling problems \par • Capable of improving solutions over generations & 
+        • Crossover often breaks important schedule structures (e.g., labs, shared lectures) \par • Requires complex repair mechanisms to fix invalid schedules \par • High computational cost due to large population evaluations & 
+        Burke et al., \textit{Genetic Algorithm Based University Timetabling} \\ \hline
+        
+        \textbf{Multi-Objective Simulated Annealing (MOSA)} & 
+        Uses simulated annealing to optimize multiple objectives simultaneously such as timetable quality and robustness. & 
+        • Can escape local optima \par • Handles multiple objectives \par • Allows evaluation of timetable robustness & 
+        • Robustness evaluation requires expensive repair simulations \par • Slow convergence for large datasets \par • Some move operations temporarily violate strict constraints & 
+        Gülcü \& Akkan, \textit{Robustness in University Course Timetabling} \\ \hline
+        
+        \textbf{Evolution Strategy (1+1-ES)} & 
+        Maintains a single timetable solution and iteratively improves it using mutation-based modifications. A new solution replaces the current one only if it improves the objective value. & 
+        • Avoids destructive crossover \par • Lower computational cost (evaluates only one candidate per iteration) \par • Mutations can be designed to preserve timetable constraints & 
+        • Requires careful design of mutation operators to avoid local optima & 
+        Srivastava et al., \textit{Evolution Strategy Based Scheduling Optimization} \\ \hline
+        
+        \textbf{Improved Evolution Strategy with Preprocessing} & 
+        Combines ES with preprocessing techniques and structured mutation strategies to improve convergence speed. & 
+        • Faster convergence \par • Better exploration of search space \par • Produces high-quality schedules with fewer conflicts & 
+        • Implementation complexity slightly higher due to preprocessing stage & 
+        Srivastava et al., \textit{Enhanced Evolution Strategy for Scheduling Problems} \\ \hline
+    \end{tabularx}
+\end{table}
+
+\end{document}
