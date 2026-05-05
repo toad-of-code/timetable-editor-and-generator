@@ -32,7 +32,7 @@ export interface EditorData {
     loadingSlots: boolean;
 
     // Rooms & professors for editing
-    rooms: { id: string; name: string; room_type: string }[];
+    rooms: { id: string; name: string; room_type: string; capacity?: number }[];
     professors: { id: string; name: string }[];
 
     // Save & publish
@@ -58,7 +58,7 @@ export function useEditorData(initialTimetableId?: string): EditorData {
     const [slots, setSlots] = useState<EditorSlot[]>([]);
     const [loadingSlots, setLoadingSlots] = useState(false);
 
-    const [rooms, setRooms] = useState<{ id: string; name: string; room_type: string }[]>([]);
+    const [rooms, setRooms] = useState<{ id: string; name: string; room_type: string; capacity?: number }[]>([]);
     const [professors, setProfessors] = useState<{ id: string; name: string }[]>([]);
 
     const [saving, setSaving] = useState(false);
@@ -85,7 +85,7 @@ export function useEditorData(initialTimetableId?: string): EditorData {
                         .from('timetables')
                         .select('id, name, semester, status, academic_year, created_at, published_at, lunch_start, lunch_end')
                         .order('created_at', { ascending: false }),
-                    supabase.from('rooms').select('id, name, room_type').order('name'),
+                    supabase.from('rooms').select('id, name, room_type, capacity').order('name'),
                     supabase.from('professors').select('id, name').order('name'),
                 ]);
                 if (ttRes.error) throw ttRes.error;

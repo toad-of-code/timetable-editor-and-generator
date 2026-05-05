@@ -700,7 +700,7 @@ const TimetableImporter: React.FC<Props> = ({ onNavigate }) => {
             const isPurelyPractical = types && types.size === 1 && types.has('Practical');
             return { name: n, capacity: 60, room_type: isPurelyPractical ? 'Lab' : 'Lecture' };
           }),
-          { onConflict: 'name' }
+          { onConflict: 'name', ignoreDuplicates: true }
         );
         if (roomErr) throw new Error(`Rooms Error: ${roomErr.message}`);
       }
@@ -711,7 +711,6 @@ const TimetableImporter: React.FC<Props> = ({ onNavigate }) => {
             name: n,
             semester: safeSemester,
             program: 'B.Tech',
-            student_count: 60,
             group_type: 'Core'
           })),
           { onConflict: 'name,semester' }
@@ -834,10 +833,15 @@ const TimetableImporter: React.FC<Props> = ({ onNavigate }) => {
           .map(code => {
             const sid = findId(dbSubjects, 'code', code);
             if (!sid) return null;
+            const isElective = parsedSlots.some(s => s.subjectCode === code && s.isElective);
+            const isMinor = parsedSlots.some(s => s.subjectCode === code && s.isMinor);
             return {
               cluster_id: clusterId!,
               subject_id: sid,
               elective_basket: subjectBasketMap.get(code) ?? null,
+              estimated_enrollment: (isElective || isMinor)
+                ? 20 + Math.floor(Math.random() * 61)  // 20–80 for electives
+                : 100,                                   // 100 for core
             };
           })
           .filter(Boolean);

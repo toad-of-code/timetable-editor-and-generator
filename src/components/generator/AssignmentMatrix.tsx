@@ -1,4 +1,4 @@
-import { Users, User2 } from 'lucide-react';
+import { Users, User2, Ban } from 'lucide-react';
 import type { Subject, Group, Professor } from '../../hooks/useGeneratorData';
 
 interface Props {
@@ -7,10 +7,10 @@ interface Props {
     professors: Professor[];
     expertiseMap: Record<string, Professor[]>;
     assignments: Record<string, Record<string, string>>;
-    sectionModes: Record<string, 'all' | 'sections' | 'itbi'>;
+    sectionModes: Record<string, 'all' | 'sections' | 'itbi' | 'disabled'>;
     onAssign: (subjectId: string, groupId: string, profId: string) => void;
     onApplyToAll: (subjectId: string, profId: string) => void;
-    onSectionModeChange: (subjectId: string, mode: 'all' | 'sections' | 'itbi') => void;
+    onSectionModeChange: (subjectId: string, mode: 'all' | 'sections' | 'itbi' | 'disabled') => void;
 }
 
 export function AssignmentMatrix({
@@ -41,6 +41,7 @@ export function AssignmentMatrix({
 
     subjects.forEach(sub => {
         const mode = sectionModes[sub.id] ?? getDefaultMode(sub);
+        if (mode === 'disabled') return;
         const relevantGroups = mode === 'all' && allGroup ? [allGroup]
             : mode === 'itbi' && itbiGroup ? [itbiGroup]
                 : sectionGroups;
@@ -86,7 +87,8 @@ export function AssignmentMatrix({
                         const rowBg = si % 2 === 0 ? 'bg-white' : 'bg-slate-50/50';
 
                         // Which groups to show based on mode
-                        const activeGroups = mode === 'all' && allGroup ? [allGroup]
+                        const activeGroups = mode === 'disabled' ? []
+                            : mode === 'all' && allGroup ? [allGroup]
                             : mode === 'itbi' && itbiGroup ? [itbiGroup]
                                 : sectionGroups;
 
@@ -145,6 +147,16 @@ export function AssignmentMatrix({
                                                 IT-BI Only
                                             </button>
                                         )}
+                                        <button
+                                            onClick={() => onSectionModeChange(subject.id, 'disabled')}
+                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition ${mode === 'disabled'
+                                                ? 'bg-red-500 text-white shadow-sm'
+                                                : 'text-gray-500 hover:text-gray-700'
+                                                }`}
+                                        >
+                                            <Ban className="w-3.5 h-3.5" />
+                                            Disabled
+                                        </button>
                                     </div>
                                 </div>
 

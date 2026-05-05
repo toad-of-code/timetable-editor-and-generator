@@ -23,12 +23,13 @@ export interface Subject {
     practical_duration: number;
     /** Elective basket name from cluster_requirements (null for core subjects). */
     elective_basket: string | null;
+    /** Per-semester estimated enrollment from cluster_requirements (null = use group default). */
+    estimated_enrollment: number | null;
 }
 
 export interface Group {
     id: string;
     name: string;
-    student_count: number;
 }
 
 export interface Room {
@@ -48,6 +49,7 @@ export interface Professor {
 
 interface SubjectRow {
     elective_basket: string | null;
+    estimated_enrollment: number | null;
     subject: Subject | null;
 }
 
@@ -107,7 +109,7 @@ export function useGeneratorData(selectedClusterId: string): GeneratorData {
                 if (profsRes.error) throw profsRes.error;
 
                 setClusters(clustersRes.data ?? []);
-                setRooms(roomsRes.data ?? []);
+                setRooms((roomsRes.data ?? []).filter((r: Room) => r.name !== 'TBA'));
                 setProfessors(profsRes.data ?? []);
             } catch (err: unknown) {
                 setError(err instanceof Error ? err.message : 'Failed to load initial data');
@@ -136,7 +138,7 @@ export function useGeneratorData(selectedClusterId: string): GeneratorData {
                 const [reqRes, groupRes, expertiseRes] = await Promise.all([
                     supabase
                         .from('cluster_requirements')
-                        .select('elective_basket, subject:subject_id (id, code, name, credits, subject_type, lectures, tutorials, practicals, practical_duration)')
+                        .select('elective_basket, estimated_enrollment, subject:subject_id (id, code, name, credits, subject_type, lectures, tutorials, practicals, practical_duration)')
                         .eq('cluster_id', selectedClusterId),
                     supabase
                         .from('student_groups')
@@ -154,7 +156,11 @@ export function useGeneratorData(selectedClusterId: string): GeneratorData {
 
                 // Type-safe extraction — merge elective_basket from the row into the subject object
                 const subjects = (reqRes.data as unknown as SubjectRow[])
-                    .map(row => row.subject ? { ...row.subject, elective_basket: row.elective_basket ?? null } : null)
+                    .map(row => row.subject ? {
+                        ...row.subject,
+                        elective_basket: row.elective_basket ?? null,
+                        estimated_enrollment: row.estimated_enrollment ?? null,
+                    } : null)
                     .filter((s): s is Subject => s !== null);
 
                 setClusterSubjects(subjects);

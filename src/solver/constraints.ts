@@ -1,5 +1,5 @@
 import type { ClassSession, Gene, Solution, FitnessResult, SolverInput } from './types';
-import { SLOTS_PER_DAY, BREAK_AFTER_SLOTS } from './constants';
+import { SLOTS_PER_DAY, BREAK_AFTER_SLOTS, isSyncedBasket } from './constants';
 
 // ─── Hard Constraint Violation Counters ────────────────────────────────────────
 // Each returns the number of violations found.
@@ -56,6 +56,7 @@ function buildOccupancyMap(
     for (let i = 0; i < sessions.length; i++) {
         const gene = solution[i];
         const key = keyFn(sessions[i], gene);
+        if (!key) continue;
         const start = gene.startBucket;
         const end = start + sessions[i].duration - 1;
         for (let s = start; s <= end; s++) {
@@ -77,7 +78,7 @@ function countRoomOverlaps(
     solution: Solution,
     rooms: SolverInput['rooms'],
 ): number {
-    const map = buildOccupancyMap(sessions, solution, (_s, g) => `R${rooms[g.roomIndex]?.id ?? g.roomIndex}`);
+    const map = buildOccupancyMap(sessions, solution, (_s, g) => g.roomIndex < 0 ? '' : `R${rooms[g.roomIndex]?.id ?? g.roomIndex}`);
     let violations = 0;
     for (const arr of map.values()) {
         if (arr.length > 1) {
@@ -93,6 +94,11 @@ function countRoomOverlaps(
 /**
  * Constraint: Professor Non-Overlap.
  * A professor can teach at most one session at any given slot.
+ *
+ * No elective exemption here — a professor is physically present in only one room,
+ * so even if two sessions are electives (students pick one), the same professor
+ * cannot teach both simultaneously. This is distinct from countGroupOverlaps,
+ * where the student-picks-one logic DOES exempt same-basket concurrent sessions.
  */
 function countProfessorOverlaps(sessions: ClassSession[], solution: Solution): number {
     // Use unique keys for empty professorId so they never collide
@@ -103,10 +109,18 @@ function countProfessorOverlaps(sessions: ClassSession[], solution: Solution): n
     for (const [key, arr] of map.entries()) {
         if (key.startsWith('P__EMPTY_')) continue;
         if (arr.length > 1) {
-            let lockedCount = 0;
-            for (const idx of arr) if (sessions[idx].isLocked) lockedCount++;
-            const baseline = lockedCount > 1 ? lockedCount - 1 : 0;
-            violations += (arr.length - 1) - baseline;
+            let pairViolations = 0;
+            for (let i = 0; i < arr.length - 1; i++) {
+                for (let j = i + 1; j < arr.length; j++) {
+                    const sA = sessions[arr[i]];
+                    const sB = sessions[arr[j]];
+                    // If both are locked, the overlap was already accepted in their published timetable
+                    if (sA.isLocked && sB.isLocked) continue;
+                    // NOTE: No elective exemption — a professor can only be in one room at a time.
+                    pairViolations++;
+                }
+            }
+            violations += pairViolations;
         }
     }
     return violations;
@@ -195,20 +209,55 @@ function computeGapPenalty(sessions: ClassSession[], solution: Solution, numDays
     return totalGaps;
 }
 
+// ─── Soft Constraint: Room Utilization Penalty ─────────────────────────────────
+
+/**
+ * For each session, compute how well the assigned room's capacity matches
+ * the student count.
+ *  - If utilization (students / capacity) falls below the min threshold → penalty
+ *  - If utilization exceeds the max threshold → penalty
+ *
+ * Example (under): threshold = 0.60, room cap = 100, students = 20 → util = 0.20
+ *                  penalty contribution = 0.60 - 0.20 = 0.40
+ * Example (over):  maxThreshold = 1.20, room cap = 50, students = 80 → util = 1.60
+ *                  penalty contribution = 1.60 - 1.20 = 0.40
+ */
+function computeRoomUtilizationPenalty(
+    sessions: ClassSession[],
+    solution: Solution,
+    rooms: SolverInput['rooms'],
+    minThreshold: number,
+    maxThreshold: number,
+): number {
+    let totalPenalty = 0;
+    for (let i = 0; i < sessions.length; i++) {
+        if (sessions[i].isLocked) continue; // can't change locked sessions
+        
+        // Ignore sessions that are strictly bound to their home room (Core Lectures/Tutorials)
+        // Since the solver cannot change their room, penalizing them just creates a static baseline.
+        if (sessions[i].slotType !== 'Practical' && !sessions[i].isElective) {
+            continue;
+        }
+
+        const room = rooms[solution[i].roomIndex];
+        if (!room || room.capacity <= 0) continue;
+        const utilization = sessions[i].studentCount / room.capacity;
+        if (utilization < minThreshold) {
+            // Under-utilization: big room, few students
+            totalPenalty += (minThreshold - utilization);
+        } else if (utilization > maxThreshold) {
+            // Over-utilization: small room, too many students
+            totalPenalty += (utilization - maxThreshold);
+        }
+    }
+    // Scale to integer-ish range (multiply by 100 so 0.40 → 40)
+    return Math.round(totalPenalty * 100);
+}
+
 // ─── Combined Fitness Evaluation ───────────────────────────────────────────────
 
 // ─── Basket Configuration ───────────────────────────────────────────────────────
 
-/**
- * Synced baskets: ALL subjects in the basket must run at the SAME timeslot
- * (students pick one from the basket, so concurrent scheduling is intentional).
- */
-const SYNCED_BASKETS = new Set(['HSMC', 'MDM']);
-
-/** Returns true if the given basket name is a synced basket. */
-function isSyncedBasket(basketName: string | null): boolean {
-    return basketName !== null && SYNCED_BASKETS.has(basketName);
-}
 
 /**
  * Constraint: Basket-Aware Elective Scheduling.
@@ -361,6 +410,7 @@ function countWMCSectionOverlaps(sessions: ClassSession[], solution: Solution): 
 function countHomeRoomViolations(sessions: ClassSession[], solution: Solution): number {
     let violations = 0;
     for (let i = 0; i < sessions.length; i++) {
+        if (sessions[i].isLocked) continue;
         if (sessions[i].slotType === 'Practical') continue;
         if (sessions[i].isElective) continue; // Electives need separate rooms
         if (solution[i].roomIndex !== sessions[i].homeRoomIndex) violations++;
@@ -416,7 +466,9 @@ function countTwoOneLectureViolations(sessions: ClassSession[], solution: Soluti
 
 /**
  * Evaluate a complete solution against all constraints.
- * fitness.total = hardViolations * hardPenalty + gapPenalty * gapWeight
+ * fitness.total = hardViolations * hardPenalty
+ *               + gapPenalty * gapWeight
+ *               + roomUtilizationPenalty * roomUtilizationWeight
  */
 export function evaluate(input: SolverInput, solution: Solution): FitnessResult {
     const { sessions, rooms, numDays, config } = input;
@@ -437,13 +489,19 @@ export function evaluate(input: SolverInput, solution: Solution): FitnessResult 
         wmcSectionOverlap + homeRoom + twoOneLecture;
 
     const gapPenalty = computeGapPenalty(sessions, solution, numDays);
+    const roomUtilizationPenalty = computeRoomUtilizationPenalty(
+        sessions, solution, rooms, config.roomUtilizationThreshold, config.roomOverutilizationThreshold,
+    );
 
-    const total = hardViolations * config.hardPenalty + gapPenalty * config.gapWeight;
+    const total = hardViolations * config.hardPenalty
+        + gapPenalty * config.gapWeight
+        + roomUtilizationPenalty * config.roomUtilizationWeight;
 
     return {
         total,
         hardViolations,
         gapPenalty,
+        roomUtilizationPenalty,
         violationBreakdown: {
             timeBoundary,
             breakCrossing,

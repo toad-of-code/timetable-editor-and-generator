@@ -9,6 +9,11 @@ import {
     type EditorSlot, type FeasibilityResult,
 } from '../solver/localSearch';
 import { SLOT_START_TIMES, SLOT_END_TIMES } from '../solver/constants';
+import { generateEditorLog, downloadLogFile } from '../solver/solverLog';
+import { evaluate } from '../solver/constraints';
+import { buildLockedSessions } from '../solver/dataPrep';
+import type { PublishedSlotRow } from '../solver/dataPrep';
+import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -38,6 +43,65 @@ function convertTo12Hour(time24: string): string {
 interface EditorViewProps {
     initialTimetableId?: string;
     onBack?: () => void;
+}
+
+// ─── Helper: fetch locked sessions ──────────────────────────────────────────────
+
+async function getLockedSessionsData(
+    timetables: any[],
+    selectedTimetableId: string | null,
+    roomList: any[],
+    normalSessionCount: number
+) {
+    const otherPublishedIds = timetables
+        .filter((t: any) => t.status === 'published' && t.id !== selectedTimetableId)
+        .map((t: any) => t.id);
+
+    let lockedSessions: import('../solver/types').ClassSession[] = [];
+    let lockedGenes: import('../solver/types').Gene[] = [];
+    let lockedTimetableNames: string[] = [];
+
+    if (otherPublishedIds.length > 0) {
+        const { data: publishedRaw } = await supabase
+            .from('timetable_slots')
+            .select(`
+                subject_id, student_group_id, professor_id, room_id,
+                day_of_week, start_time, end_time, slot_type,
+                subject:subject_id (code, subject_type),
+                student_group:student_group_id (name)
+            `)
+            .in('timetable_id', otherPublishedIds);
+
+        if (publishedRaw && publishedRaw.length > 0) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const publishedSlots: PublishedSlotRow[] = (publishedRaw as any[]).map(r => ({
+                subject_id: r.subject_id,
+                student_group_id: r.student_group_id,
+                professor_id: r.professor_id,
+                room_id: r.room_id,
+                day_of_week: r.day_of_week,
+                start_time: r.start_time,
+                end_time: r.end_time,
+                slot_type: r.slot_type,
+                subject_code: r.subject?.code ?? '??',
+                subject_type: r.subject?.subject_type ?? 'Core',
+                group_name: r.student_group?.name ?? '??',
+            }));
+
+            const locked = buildLockedSessions(
+                publishedSlots,
+                roomList,
+                normalSessionCount,
+            );
+
+            lockedSessions = locked.sessions;
+            lockedGenes = locked.genes;
+            lockedTimetableNames = timetables
+                .filter((t: any) => otherPublishedIds.includes(t.id))
+                .map((t: any) => `${t.name} (Sem ${t.semester})`);
+        }
+    }
+    return { lockedSessions, lockedGenes, lockedTimetableNames };
 }
 
 // ─── Main Component ────────────────────────────────────────────────────────────
@@ -276,9 +340,93 @@ export function EditorView({ initialTimetableId, onBack }: EditorViewProps) {
     // ── Save / Publish ──
 
     const handleSave = useCallback(async () => {
-        try { await saveSlots(slots); toast.success('Timetable saved!'); setUndoStack([]); }
-        catch { toast.error('Save failed'); }
-    }, [slots, saveSlots]);
+        try {
+            await saveSlots(slots);
+            toast.success('Timetable saved!');
+            setUndoStack([]);
+
+            // ── Auto-download editor log with locked sessions from other timetables ──
+            try {
+                const roomList = rooms.map(r => ({ id: r.id, name: r.name, roomType: r.room_type, capacity: r.capacity ?? 60 }));
+                const roomIdToIndex = new Map<string, number>();
+                roomList.forEach((r, i) => roomIdToIndex.set(r.id, i));
+
+                const lectureDoubleSet = new Set<string>();
+                for (const s of slots) {
+                    if (s.slot_type !== 'Lecture') continue;
+                    const si = SLOT_START_TIMES.indexOf(s.start_time.slice(0, 5));
+                    const ei = SLOT_END_TIMES.indexOf(s.end_time.slice(0, 5));
+                    if (Math.max(1, ei - si + 1) >= 2) lectureDoubleSet.add(`${s.subject_id}|${s.student_group_id}`);
+                }
+
+                const sessions = slots.map((s, i) => {
+                    const startIdx = SLOT_START_TIMES.indexOf(s.start_time.slice(0, 5));
+                    const endIdx = SLOT_END_TIMES.indexOf(s.end_time.slice(0, 5));
+                    const duration = Math.max(1, endIdx - startIdx + 1);
+                    const isElective = s.subject_type === 'Elective' || s.subject_type === 'Minor';
+                    const profIsUnknown = s.professor_name === 'Unknown' || s.professor_name === 'TBD';
+                    let lecturePairIndex = -2;
+                    if (s.slot_type === 'Lecture' && !isElective) {
+                        if (duration >= 2) lecturePairIndex = 0;
+                        else if (lectureDoubleSet.has(`${s.subject_id}|${s.student_group_id}`)) lecturePairIndex = -1;
+                    }
+                    return {
+                        id: i, subjectId: s.subject_id, subjectCode: s.subject_code,
+                        groupId: s.student_group_id, professorId: profIsUnknown ? '' : (s.professor_id ?? ''),
+                        duration, slotType: s.slot_type as 'Lecture' | 'Tutorial' | 'Practical',
+                        homeRoomIndex: s.room_id ? (roomIdToIndex.get(s.room_id) ?? 0) : 0,
+                        isElective, electiveSlotIndex: isElective ? 0 : -1,
+                        basketName: null,
+                        isWMCGroup: s.group_name === 'WMC' || /IT[\s-]*BI/i.test(s.group_name ?? ''),
+                        lecturePairIndex,
+                        studentCount: 100,
+                        isLocked: false,
+                    };
+                });
+
+                const normalSessionCount = sessions.length;
+
+                // ── Fetch locked sessions from all OTHER published timetables ──
+                const { lockedSessions, lockedGenes, lockedTimetableNames } = await getLockedSessionsData(
+                    timetables,
+                    selectedTimetableId,
+                    roomList,
+                    normalSessionCount
+                );
+
+                // Combine normal + locked for evaluation
+                const allSessions = [...sessions, ...lockedSessions];
+
+                const solverInput = {
+                    sessions: allSessions, rooms: roomList, numDays: 5, numBuckets: 8,
+                    config: {
+                        maxGenerations: 0, reportInterval: 0, initialSigma: 2, gapWeight: 1,
+                        roomUtilizationWeight: 0.8, roomUtilizationThreshold: 0.60, roomOverutilizationThreshold: 1.20,
+                        hardPenalty: 1000, adaptationWindow: 50, sigmaIncrease: 1.22, sigmaDecrease: 0.82,
+                    },
+                };
+
+                const normalSolution = solutionFromSlots(
+                    { ...solverInput, sessions },
+                    slots,
+                );
+                const fullSolution = [...normalSolution, ...lockedGenes];
+                const fitness = evaluate(solverInput, fullSolution);
+
+                const logContent = generateEditorLog({
+                    sessions: allSessions, rooms: roomList, solution: fullSolution, fitness,
+                    timetableName: timetableMeta?.name ?? 'Unknown Timetable',
+                    slots,
+                    normalSessionCount,
+                    lockedTimetableNames,
+                });
+                const logTs = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+                downloadLogFile(logContent, `editor-log_${logTs}.txt`);
+            } catch (logErr) {
+                console.warn('Editor log generation failed:', logErr);
+            }
+        } catch { toast.error('Save failed'); }
+    }, [slots, saveSlots, rooms, timetableMeta, timetables, selectedTimetableId]);
 
     const handlePublish = useCallback(async () => {
         try {
@@ -291,9 +439,9 @@ export function EditorView({ initialTimetableId, onBack }: EditorViewProps) {
 
     // ── Feasibility check ──
 
-    const handleCheckFeasibility = useCallback(() => {
+    const handleCheckFeasibility = useCallback(async () => {
         if (slots.length === 0) return;
-        const roomList = rooms.map(r => ({ id: r.id, name: r.name, roomType: r.room_type }));
+        const roomList = rooms.map(r => ({ id: r.id, name: r.name, roomType: r.room_type, capacity: r.capacity ?? 60 }));
         const roomIdToIndex = new Map<string, number>();
         roomList.forEach((r, i) => roomIdToIndex.set(r.id, i));
 
@@ -344,32 +492,46 @@ export function EditorView({ initialTimetableId, onBack }: EditorViewProps) {
                 basketName: null,
                 isWMCGroup: s.group_name === 'WMC' || /IT[\s-]*BI/i.test(s.group_name ?? ''),
                 lecturePairIndex,
+                studentCount: 100,
+                isLocked: false,
             };
         });
 
+        const { lockedSessions, lockedGenes } = await getLockedSessionsData(
+            timetables,
+            selectedTimetableId,
+            roomList,
+            sessions.length
+        );
+
+        const allSessions = [...sessions, ...lockedSessions];
+
         const solverInput = {
-            sessions, rooms: roomList, numDays: 5, numBuckets: 8,
+            sessions: allSessions, rooms: roomList, numDays: 5, numBuckets: 8,
             config: {
                 maxGenerations: 0, reportInterval: 0, initialSigma: 2, gapWeight: 1,
+                roomUtilizationWeight: 0.8, roomUtilizationThreshold: 0.60, roomOverutilizationThreshold: 1.20,
                 hardPenalty: 1000, adaptationWindow: 50, sigmaIncrease: 1.22, sigmaDecrease: 0.82
             },
         };
 
-        const solution = solutionFromSlots(solverInput, slots);
-        const result = checkFeasibility(solverInput, solution);
+        const normalSolution = solutionFromSlots({ ...solverInput, sessions }, slots);
+        const fullSolution = [...normalSolution, ...lockedGenes];
+        const result = checkFeasibility(solverInput, fullSolution);
+        
         setFeasibility(result);
         setIsFeasibilityDirty(false);
         if (result.feasible) toast.success('No conflicts detected! ✅');
         else toast(`${result.fitness.hardViolations} conflict(s) found`, { icon: '⚠️' });
-    }, [slots, rooms]);
+    }, [slots, rooms, timetables, selectedTimetableId]);
 
     // ── LNS Auto-Fix handler ──
-    const handleRunLns = useCallback(() => {
+    const handleRunLns = useCallback(async () => {
         if (slots.length === 0) return;
         setIsLnsRunning(true);
 
         // Build the same solver input as feasibility check
-        const roomList = rooms.map(r => ({ id: r.id, name: r.name, roomType: r.room_type }));
+        const roomList = rooms.map(r => ({ id: r.id, name: r.name, roomType: r.room_type, capacity: r.capacity ?? 60 }));
         const roomIdToIndex = new Map<string, number>();
         roomList.forEach((r, i) => roomIdToIndex.set(r.id, i));
 
@@ -407,19 +569,32 @@ export function EditorView({ initialTimetableId, onBack }: EditorViewProps) {
                 basketName: null,
                 isWMCGroup: s.group_name === 'WMC' || /IT[\s-]*BI/i.test(s.group_name ?? ''),
                 lecturePairIndex,
+                studentCount: 100,
+                isLocked: false,
             };
         });
 
+        const { lockedSessions, lockedGenes } = await getLockedSessionsData(
+            timetables,
+            selectedTimetableId,
+            roomList,
+            sessions.length
+        );
+
+        const allSessions = [...sessions, ...lockedSessions];
+
         const solverInput = {
-            sessions, rooms: roomList, numDays: 5, numBuckets: 8,
+            sessions: allSessions, rooms: roomList, numDays: 5, numBuckets: 8,
             config: {
                 maxGenerations: 0, reportInterval: 0, initialSigma: 2, gapWeight: 1,
+                roomUtilizationWeight: 0.8, roomUtilizationThreshold: 0.60, roomOverutilizationThreshold: 1.20,
                 hardPenalty: 1000, adaptationWindow: 50, sigmaIncrease: 1.22, sigmaDecrease: 0.82
             },
         };
 
-        const solution = solutionFromSlots(solverInput, slots);
-        const result = runFullLNS(solverInput, solution, 1500);
+        const normalSolution = solutionFromSlots({ ...solverInput, sessions }, slots);
+        const fullSolution = [...normalSolution, ...lockedGenes];
+        const result = runFullLNS(solverInput, fullSolution, 1500);
 
         if (result && result.fitness.total < (feasibility?.fitness?.total ?? Infinity)) {
             pushUndo();
@@ -455,7 +630,7 @@ export function EditorView({ initialTimetableId, onBack }: EditorViewProps) {
             toast('No improvement found — try manual fixes', { icon: '😕' });
         }
         setIsLnsRunning(false);
-    }, [slots, rooms, feasibility, pushUndo, setSlots]);
+    }, [slots, rooms, feasibility, pushUndo, setSlots, timetables, selectedTimetableId]);
 
     // Used to be automatic, now manual via button
 
@@ -874,6 +1049,22 @@ export function EditorView({ initialTimetableId, onBack }: EditorViewProps) {
                                     </div>
                                     <p className="text-[10px] mt-0.5 opacity-80 leading-snug">
                                         Empty slots between classes for students. Not a hard conflict, but reducing gaps improves the schedule quality.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+                        {feasibility.fitness.roomUtilizationPenalty > 0 && (
+                            <div className="mt-2 flex items-start gap-3 px-3 py-2 rounded-lg border bg-amber-50 border-amber-200 text-amber-700 bg-white/60">
+                                <span className="text-base mt-0.5 flex-shrink-0">🏢</span>
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-bold text-xs">Room Under-Utilization</span>
+                                        <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-200">
+                                            {feasibility.fitness.roomUtilizationPenalty}
+                                        </span>
+                                    </div>
+                                    <p className="text-[10px] mt-0.5 opacity-80 leading-snug">
+                                        Some rooms are &lt;60% filled. Not a conflict, but matching room sizes to class sizes improves space efficiency.
                                     </p>
                                 </div>
                             </div>

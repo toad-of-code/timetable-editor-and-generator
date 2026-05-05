@@ -1,5 +1,5 @@
 import type { ClassSession, SolverInput, Gene, Solution } from './types';
-import { LECTURE_DURATION, DOUBLE_LECTURE_DURATION, TUTORIAL_DURATION, NUM_DAYS, SLOTS_PER_DAY, DEFAULT_SOLVER_CONFIG, timeToSlot } from './constants';
+import { LECTURE_DURATION, DOUBLE_LECTURE_DURATION, TUTORIAL_DURATION, NUM_DAYS, SLOTS_PER_DAY, DEFAULT_SOLVER_CONFIG, timeToSlot, endTimeToSlot } from './constants';
 import { generateInitialSolution } from './mutations';
 import type { Subject, Group, Room } from '../hooks/useGeneratorData';
 
@@ -62,6 +62,10 @@ export function prepareSolverInput(
             const homeRoomId = homeRooms[group.id] ?? '';
             const homeRoomIndex = roomIndexMap.get(homeRoomId) ?? 0;
             const isWMCGroup = group.name === 'WMC' || /IT[\s-]*BI/i.test(group.name);
+            // Student count: use estimated_enrollment from cluster_requirements,
+            // fall back to 100 for core, random 20-80 for electives
+            const subjectEnrollment = subject.estimated_enrollment
+                ?? (isElective ? (20 + Math.floor(Math.random() * 61)) : 100);
 
             // ── 2+1 Lecture Expansion ────────────────────────────────────────────
             // For non-elective core lectures ONLY:
@@ -89,6 +93,8 @@ export function prepareSolverInput(
                     basketName: null,
                     isWMCGroup,
                     lecturePairIndex: 0, // the double-lecture block
+                    studentCount: subjectEnrollment,
+                    isLocked: false,
                 });
 
                 // Remaining single-lecture slots (lectures - 2)
@@ -107,6 +113,8 @@ export function prepareSolverInput(
                         basketName: null,
                         isWMCGroup,
                         lecturePairIndex: -1, // remainder single-lecture slot
+                        studentCount: subjectEnrollment,
+                        isLocked: false,
                     });
                 }
             } else {
@@ -126,6 +134,8 @@ export function prepareSolverInput(
                         basketName: isElective ? (subject.elective_basket ?? null) : null,
                         isWMCGroup,
                         lecturePairIndex: -2, // not applicable
+                        studentCount: subjectEnrollment,
+                        isLocked: false,
                     });
                 }
             }
@@ -146,6 +156,8 @@ export function prepareSolverInput(
                     basketName: isElective ? (subject.elective_basket ?? null) : null,
                     isWMCGroup,
                     lecturePairIndex: -2, // not applicable
+                    studentCount: subjectEnrollment,
+                    isLocked: false,
                 });
             }
 
@@ -170,6 +182,8 @@ export function prepareSolverInput(
                     basketName: isElective ? (subject.elective_basket ?? null) : null,
                     isWMCGroup,
                     lecturePairIndex: -2, // not applicable
+                    studentCount: subjectEnrollment,
+                    isLocked: false,
                 });
             }
         }
@@ -177,7 +191,7 @@ export function prepareSolverInput(
 
     return {
         sessions,
-        rooms: rooms.map(r => ({ id: r.id, name: r.name, roomType: r.room_type })),
+        rooms: rooms.map(r => ({ id: r.id, name: r.name, roomType: r.room_type, capacity: r.capacity ?? 60 })),
         numDays: NUM_DAYS,
         numBuckets: SLOTS_PER_DAY,
         config: { ...DEFAULT_SOLVER_CONFIG },
@@ -297,7 +311,7 @@ export interface LockedSessionResult {
  */
 export function buildLockedSessions(
     publishedSlots: PublishedSlotRow[],
-    rooms: { id: string; name: string; roomType: string }[],
+    rooms: { id: string; name: string; roomType: string; capacity: number }[],
     startId: number,
 ): LockedSessionResult {
     const roomIdToIndex = new Map<string, number>();
@@ -308,10 +322,10 @@ export function buildLockedSessions(
 
     for (const slot of publishedSlots) {
         const startBucket = timeToSlot(slot.start_time);
-        const endBucket = timeToSlot(slot.end_time);
+        const endBucket = endTimeToSlot(slot.end_time);
         // Duration: difference in bucket numbers (at least 1)
         const duration = Math.max(1, endBucket - startBucket + 1);
-        const roomIndex = slot.room_id ? (roomIdToIndex.get(slot.room_id) ?? 0) : 0;
+        const roomIndex = slot.room_id ? (roomIdToIndex.get(slot.room_id) ?? -1) : -1;
         const isElective = slot.subject_type === 'Elective' || slot.subject_type === 'Minor';
 
         sessions.push({
@@ -329,6 +343,7 @@ export function buildLockedSessions(
             isWMCGroup: slot.group_name === 'WMC' || /IT[\s-]*BI/i.test(slot.group_name ?? ''),
             isLocked: true,
             lecturePairIndex: -2, // locked sessions are not subject to 2+1 format
+            studentCount: 100, // default for locked sessions (no real data available)
         });
 
         genes.push({

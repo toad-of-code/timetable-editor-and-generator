@@ -22,7 +22,7 @@ export function GeneratorView() {
     const [selectedClusterId, setSelectedClusterId] = useState('');
     const [homeRooms, setHomeRooms] = useState<Record<string, string>>({});
     const [assignments, setAssignments] = useState<Record<string, Record<string, string>>>({});
-    const [sectionModes, setSectionModes] = useState<Record<string, 'all' | 'sections' | 'itbi'>>({});
+    const [sectionModes, setSectionModes] = useState<Record<string, 'all' | 'sections' | 'itbi' | 'disabled'>>({});
 
     // ─── Solver State ─────────────────────────────────────────────────────────
     const [isRunning, setIsRunning] = useState(false);
@@ -90,7 +90,7 @@ export function GeneratorView() {
         setAssignments(prev => ({ ...prev, [subjectId]: all }));
     };
 
-    const handleSectionModeChange = (subjectId: string, mode: 'all' | 'sections' | 'itbi') => {
+    const handleSectionModeChange = (subjectId: string, mode: 'all' | 'sections' | 'itbi' | 'disabled') => {
         setSectionModes(prev => ({ ...prev, [subjectId]: mode }));
         // Clear assignments for this subject when switching modes
         setAssignments(prev => ({ ...prev, [subjectId]: {} }));
@@ -171,7 +171,7 @@ export function GeneratorView() {
         });
 
         // Set mode: use existing mode or smart default (electives → WMC)
-        const newModes: Record<string, 'all' | 'sections' | 'itbi'> = {};
+        const newModes: Record<string, 'all' | 'sections' | 'itbi' | 'disabled'> = {};
         const newAssignments: Record<string, Record<string, string>> = {};
 
         clusterSubjects.forEach((sub, si) => {
@@ -183,7 +183,9 @@ export function GeneratorView() {
 
             const itbiGroup = clusterGroups.find(g => isITBIGroup(g.name));
 
-            if (mode === 'itbi' && itbiGroup) {
+            if (mode === 'disabled') {
+                // do nothing
+            } else if (mode === 'itbi' && itbiGroup) {
                 // Only assign to IT-BI group
                 newAssignments[sub.id][itbiGroup.id] = resolved[si % resolved.length].id;
             } else if (mode === 'all' && allGroup) {
@@ -204,8 +206,9 @@ export function GeneratorView() {
 
     // ─── Generate Timetable Handler ───────────────────────────────────────────
     const handleGenerate = useCallback(async () => {
+        const activeSubjects = clusterSubjects.filter(s => sectionModes[s.id] !== 'disabled');
         const solverInput = prepareSolverInput(
-            clusterSubjects as SubjectFull[],
+            activeSubjects as SubjectFull[],
             clusterGroups,
             professors,
             rooms,
@@ -357,8 +360,9 @@ export function GeneratorView() {
             if (ttErr) throw ttErr;
 
             // Prepare solver input for session info
+            const activeSubjects = clusterSubjects.filter(s => sectionModes[s.id] !== 'disabled');
             const solverInput = prepareSolverInput(
-                clusterSubjects as SubjectFull[],
+                activeSubjects as SubjectFull[],
                 clusterGroups,
                 professors,
                 rooms,
@@ -417,6 +421,7 @@ export function GeneratorView() {
     let filledCells = 0;
     clusterSubjects.forEach(sub => {
         const mode = sectionModes[sub.id] ?? getDefaultMode(sub);
+        if (mode === 'disabled') return;
         const itbiGroup = clusterGroups.find(g => isITBIGroup(g.name));
         const relevantGroups = mode === 'all' && allGroup ? [allGroup]
             : mode === 'itbi' && itbiGroup ? [itbiGroup]
@@ -580,7 +585,7 @@ export function GeneratorView() {
                     result={solverResult}
                     sessionCount={
                         prepareSolverInput(
-                            clusterSubjects as SubjectFull[],
+                            clusterSubjects.filter(s => sectionModes[s.id] !== 'disabled') as SubjectFull[],
                             clusterGroups,
                             professors,
                             rooms,

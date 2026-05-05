@@ -34,7 +34,9 @@ export interface ClassSession {
   /** True if this session is for the WMC (whole batch) group */
   isWMCGroup: boolean;
   /** True if this session is locked (from a published timetable) and must not be mutated */
-  isLocked?: boolean;
+  isLocked: boolean;
+  /** Number of students attending this session (used for room utilization soft constraint) */
+  studentCount: number;
   /**
    * 2+1 format marker for lecture sessions.
    *  0   = this is the one double-lecture (2-hour) block.
@@ -74,6 +76,12 @@ export interface SolverConfig {
   initialSigma: number;
   /** Weight for the student-gap soft penalty (W_gap) */
   gapWeight: number;
+  /** Weight for the room-utilization soft penalty */
+  roomUtilizationWeight: number;
+  /** Minimum acceptable room fill ratio (0–1). Below this → penalty. */
+  roomUtilizationThreshold: number;
+  /** Maximum acceptable room fill ratio (e.g. 1.20). Above this → penalty. */
+  roomOverutilizationThreshold: number;
   /** Hard-constraint penalty multiplier */
   hardPenalty: number;
   /** How many generations to average for the 1/5th rule */
@@ -94,6 +102,8 @@ export interface FitnessResult {
   hardViolations: number;
   /** Soft penalty (student gap cost) */
   gapPenalty: number;
+  /** Soft penalty (room under-utilization cost) */
+  roomUtilizationPenalty: number;
   /** Breakdown of violations by constraint type (only on best results) */
   violationBreakdown?: {
     timeBoundary: number;
@@ -147,8 +157,8 @@ export interface SolverResult {
  */
 export interface SolverInput {
   sessions: ClassSession[];
-  /** Room info: id and type, indexed by roomIndex */
-  rooms: { id: string; name: string; roomType: string }[];
+  /** Room info: id, type, and capacity, indexed by roomIndex */
+  rooms: { id: string; name: string; roomType: string; capacity: number }[];
   /** Number of working days (always 5) */
   numDays: number;
   /** Number of 1-hour slots per day (always 8) */

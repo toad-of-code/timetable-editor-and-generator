@@ -14,6 +14,7 @@ interface CourseResult {
     electiveGroup?: string;   // e.g. 'HSMC', 'Basket 1', 'Basket 2'
     isBasket?: boolean;
     highlight?: boolean;
+    studentCount?: number;
 }
 
 interface SemesterData {
@@ -64,13 +65,14 @@ async function fetchSemesterSubjects(): Promise<SemesterData[]> {
     if (clErr) throw clErr;
     if (!clusters || clusters.length === 0) return [];
 
-    // 2. Fetch all cluster_requirements with joined subject details
+    // 2. Fetch all cluster_requirements with joined subject details + estimated_enrollment
     const clusterIds = clusters.map(c => c.id);
 
     const { data: requirements, error: reqErr } = await supabase
         .from('cluster_requirements')
         .select(`
             cluster_id,
+            estimated_enrollment,
             subject:subject_id (
                 id,
                 code,
@@ -87,9 +89,9 @@ async function fetchSemesterSubjects(): Promise<SemesterData[]> {
 
     if (reqErr) throw reqErr;
 
-    // 3. Group subjects by cluster_id
+    // 3. Group subjects by cluster_id (store enrollment alongside)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const clusterToSubjects = new Map<string, Map<string, any>>();
+    const clusterToSubjects = new Map<string, Map<string, { sub: any; enrollment: number | null }>>();
 
     for (const req of requirements ?? []) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -98,7 +100,10 @@ async function fetchSemesterSubjects(): Promise<SemesterData[]> {
         if (!clusterToSubjects.has(req.cluster_id)) {
             clusterToSubjects.set(req.cluster_id, new Map());
         }
-        clusterToSubjects.get(req.cluster_id)!.set(sub.id, sub);
+        clusterToSubjects.get(req.cluster_id)!.set(sub.id, {
+            sub,
+            enrollment: req.estimated_enrollment ?? null,
+        });
     }
 
     // 4. Build SemesterData[], one per cluster (deduplicate by semester number)
@@ -111,7 +116,7 @@ async function fetchSemesterSubjects(): Promise<SemesterData[]> {
         const subjectMap = clusterToSubjects.get(cluster.id) ?? new Map();
         const courses: CourseResult[] = [];
 
-        for (const sub of subjectMap.values()) {
+        for (const { sub, enrollment } of subjectMap.values()) {
             const isElective = mapType(sub.subject_type) === 'Elective';
             courses.push({
                 id: sub.id,
@@ -122,6 +127,7 @@ async function fetchSemesterSubjects(): Promise<SemesterData[]> {
                 electiveGroup: sub.elective_group ?? undefined,
                 isBasket: isElective,
                 highlight: isElective,
+                studentCount: enrollment ?? (isElective ? 0 : 100),
             });
         }
 
@@ -212,6 +218,7 @@ function CourseRow({ course, idx }: { course: CourseResult; idx: number }) {
                 <td className="px-3 py-2.5 font-mono text-indigo-700 whitespace-nowrap text-xs">{course.code}</td>
                 <td className="px-3 py-2.5"><TypeBadge type={course.type} /></td>
                 <td className="px-3 py-2.5 text-center font-mono text-gray-600 whitespace-nowrap">{course.credit}</td>
+                <td className="px-3 py-2.5 text-center font-mono text-gray-800 font-semibold">{course.studentCount}</td>
             </tr>
         </>
     );
@@ -251,7 +258,7 @@ function SemesterBlock({ data, defaultOpen }: { data: SemesterData; defaultOpen:
                     <table className="w-full border-collapse text-xs">
                         <thead>
                             <tr className="bg-blue-50 border-b-2 border-blue-100 text-blue-800">
-                                {['#', 'Course Name', 'Code', 'Type', 'Credits (L+T+P)'].map((h) => (
+                                {['#', 'Course Name', 'Code', 'Type', 'Credits (L+T+P)', 'Students'].map((h) => (
                                     <th key={h} className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">{h}</th>
                                 ))}
                             </tr>
@@ -259,7 +266,7 @@ function SemesterBlock({ data, defaultOpen }: { data: SemesterData; defaultOpen:
                         <tbody>
                             {data.courses.length === 0 ? (
                                 <tr>
-                                    <td colSpan={5} className="px-4 py-6 text-center text-gray-400 italic text-xs">
+                                    <td colSpan={6} className="px-4 py-6 text-center text-gray-400 italic text-xs">
                                         No subjects found for this semester
                                     </td>
                                 </tr>
@@ -279,7 +286,7 @@ function SemesterBlock({ data, defaultOpen }: { data: SemesterData; defaultOpen:
                                         {minors.length > 0 && (
                                             <>
                                                 <tr>
-                                                    <td colSpan={5} className="px-3 py-1.5 bg-gradient-to-r from-orange-500 to-amber-400 text-white">
+                                                    <td colSpan={6} className="px-3 py-1.5 bg-gradient-to-r from-orange-500 to-amber-400 text-white">
                                                         <div className="flex items-center gap-2">
                                                             <span className="font-bold text-xs tracking-wider uppercase">Minor (MDM)</span>
                                                         </div>
@@ -303,7 +310,7 @@ function SemesterBlock({ data, defaultOpen }: { data: SemesterData; defaultOpen:
                                             return Array.from(groupMap.entries()).map(([groupName, courses]) => (
                                                 <React.Fragment key={groupName}>
                                                     <tr>
-                                                        <td colSpan={5} className="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-violet-500 text-white">
+                                                        <td colSpan={6} className="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-violet-500 text-white">
                                                             <div className="flex items-center gap-2">
                                                                 <span className="font-bold text-xs tracking-wider uppercase">{groupName}</span>
                                                                 <span className="text-white/70 text-[10px] font-normal">(student picks one)</span>

@@ -59,7 +59,7 @@ export function runSolver(
         let generation = 0;
         let stagnationCounter = 0;
 
-        const BATCH_SIZE = 500;
+        const BATCH_SIZE = 100;
         const STAGNATION_LIMIT = 15_000; // restart if no improvement for 15k gens
         const SIGMA_MIN = 0.5;
         const SIGMA_MAX = 30;
@@ -80,28 +80,28 @@ export function runSolver(
             }
 
             // Early termination if feasible
-            if (bestFitness.hardViolations === 0) {
-                const elapsed = performance.now() - startTime;
-                // Report final progress
-                onProgress({
-                    generation,
-                    maxGenerations: config.maxGenerations,
-                    fitness: bestFitness,
-                    sigma,
-                    successRate: successes / Math.max(generation, 1),
-                    elapsedMs: elapsed,
-                    feasible: true,
-                });
-                resolve({
-                    solution: bestSolution,
-                    fitness: bestFitness,
-                    bestGeneration,
-                    totalGenerations: generation,
-                    elapsedMs: elapsed,
-                    cancelled: false,
-                });
-                return;
-            }
+            // if (bestFitness.hardViolations === 0) {
+            //     const elapsed = performance.now() - startTime;
+            //     // Report final progress
+            //     onProgress({
+            //         generation,
+            //         maxGenerations: config.maxGenerations,
+            //         fitness: bestFitness,
+            //         sigma,
+            //         successRate: successes / Math.max(generation, 1),
+            //         elapsedMs: elapsed,
+            //         feasible: true,
+            //     });
+            //     resolve({
+            //         solution: bestSolution,
+            //         fitness: bestFitness,
+            //         bestGeneration,
+            //         totalGenerations: generation,
+            //         elapsedMs: elapsed,
+            //         cancelled: false,
+            //     });
+            //     return;
+            // }
 
             const batchEnd = Math.min(generation + BATCH_SIZE, config.maxGenerations);
 

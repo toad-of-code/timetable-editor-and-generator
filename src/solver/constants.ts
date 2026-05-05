@@ -65,13 +65,31 @@ export const DOUBLE_LECTURE_DURATION = 2;
  */
 export const DEFAULT_PRACTICAL_DURATION = 2;
 
+// ─── Synced Baskets ───────────────────────────────────────────────────────────
+
+/**
+ * Synced baskets: ALL subjects in the basket must run at the SAME timeslot
+ * (students pick one from the basket, so concurrent scheduling is intentional).
+ * Free baskets (basket-1, basket-2, etc.) are NOT synced — their members can
+ * schedule independently across different timeslots.
+ */
+export const SYNCED_BASKETS = new Set(['HSMC', 'MDM']);
+
+/** Returns true if the given basket name is a synced basket. */
+export function isSyncedBasket(basketName: string | null): boolean {
+    return basketName !== null && SYNCED_BASKETS.has(basketName);
+}
+
 // ─── Default Solver Config ─────────────────────────────────────────────────────
 
 export const DEFAULT_SOLVER_CONFIG: SolverConfig = {
-    maxGenerations: 200_000,
+    maxGenerations: 250_000,
     reportInterval: 1000,
     initialSigma: 2.0,
     gapWeight: 1.0,
+    roomUtilizationWeight: 2.0,
+    roomUtilizationThreshold: 0.60,   // 60% — rooms below this fill ratio are penalized
+    roomOverutilizationThreshold: 1.20, // 120% — rooms above this fill ratio are penalized
     hardPenalty: 1000,
     adaptationWindow: 50,
     sigmaIncrease: 1.22,
@@ -114,6 +132,31 @@ export function timeToSlot(time: string): number {
     for (let i = 0; i < SLOT_START_TIMES.length; i++) {
         const [sh, sm] = SLOT_START_TIMES[i].split(':').map(Number);
         const diff = Math.abs(targetMins - (sh * 60 + sm));
+        if (diff < bestDiff) {
+            bestDiff = diff;
+            bestSlot = i + 1;
+        }
+    }
+    return bestSlot;
+}
+
+/**
+ * Convert an end time string like "10:50" to the nearest ending slot number (1-indexed).
+ */
+export function endTimeToSlot(time: string): number {
+    // Find the slot whose end time matches
+    const idx = SLOT_END_TIMES.indexOf(time);
+    if (idx !== -1) return idx + 1;
+
+    // Fallback: find the closest slot by comparing minutes
+    const [h, m] = time.split(':').map(Number);
+    const targetMins = h * 60 + m;
+
+    let bestSlot = 1;
+    let bestDiff = Infinity;
+    for (let i = 0; i < SLOT_END_TIMES.length; i++) {
+        const [eh, em] = SLOT_END_TIMES[i].split(':').map(Number);
+        const diff = Math.abs(targetMins - (eh * 60 + em));
         if (diff < bestDiff) {
             bestDiff = diff;
             bestSlot = i + 1;

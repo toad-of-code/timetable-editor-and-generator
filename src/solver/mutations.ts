@@ -1,5 +1,5 @@
 import type { ClassSession, Gene, Solution, SolverInput } from './types';
-import { SLOTS_PER_DAY, NUM_DAYS, crossesBreak } from './constants';
+import { SLOTS_PER_DAY, NUM_DAYS, crossesBreak, isSyncedBasket } from './constants';
 
 // ─── Random Helpers ────────────────────────────────────────────────────────────
 
@@ -86,12 +86,14 @@ function pickRoomForSession(session: ClassSession, rooms: SolverInput['rooms']):
 
 // ─── Elective group helpers ────────────────────────────────────────────────────
 
-/** Build a map of electiveSyncKey → session indices */
-function buildElectiveGroups(sessions: ClassSession[]): Map<string, number[]> {
+/** Build a map of electiveSyncKey → session indices (ONLY for synced baskets) */
+function buildSyncedElectiveGroups(sessions: ClassSession[]): Map<string, number[]> {
     const groups = new Map<string, number[]>();
     for (let i = 0; i < sessions.length; i++) {
         const s = sessions[i];
         if (!s.isElective || s.electiveSlotIndex < 0 || !s.basketName) continue;
+        // Only group synced baskets (HSMC, MDM) — free baskets move independently
+        if (!isSyncedBasket(s.basketName)) continue;
         const key = `${s.basketName}|${s.slotType}|${s.electiveSlotIndex}`;
         const arr = groups.get(key);
         if (arr) arr.push(i);
@@ -117,8 +119,36 @@ export function generateInitialSolution(input: SolverInput): Solution {
 
     // For synced baskets: groupKey → { day, startBucket } (shared slot)
     const syncedBasketSlots = new Map<string, { day: number; startBucket: number }>();
-    // Global set of used day:slot combos across ALL elective baskets (for anti-clash)
-    const usedElectiveSlots = new Set<string>();
+    // Per-basket slot tracking: basketName → Set of "day:bucket" keys it occupies
+    // Used to prevent cross-basket clashes during initial placement
+    const basketSlotMap = new Map<string, Set<string>>();
+
+    /** Get or create the slot set for a basket */
+    function getBasketSlots(basketName: string): Set<string> {
+        let s = basketSlotMap.get(basketName);
+        if (!s) { s = new Set(); basketSlotMap.set(basketName, s); }
+        return s;
+    }
+
+    /** Check if placing a session at (day, startBucket) with given duration
+     *  would clash with any OTHER basket's already-placed sessions */
+    function wouldClashWithOtherBasket(basketName: string, day: number, startBucket: number, duration: number): boolean {
+        for (const [otherBasket, slots] of basketSlotMap.entries()) {
+            if (otherBasket === basketName) continue;
+            for (let b = startBucket; b < startBucket + duration; b++) {
+                if (slots.has(`${day}:${b}`)) return true;
+            }
+        }
+        return false;
+    }
+
+    /** Record that a basket occupies (day, startBucket..startBucket+duration-1) */
+    function recordBasketSlots(basketName: string, day: number, startBucket: number, duration: number): void {
+        const slots = getBasketSlots(basketName);
+        for (let b = startBucket; b < startBucket + duration; b++) {
+            slots.add(`${day}:${b}`);
+        }
+    }
 
     const solution: Gene[] = new Array(sessions.length);
 
@@ -137,35 +167,42 @@ export function generateInitialSolution(input: SolverInput): Solution {
         if (session.isElective && session.electiveSlotIndex >= 0 && session.basketName) {
             const groupKey = `${session.basketName}|${session.slotType}|${session.electiveSlotIndex}`;
 
-            // Both SYNCED and FREE baskets now handle slots exactly the same way:
-            // All members of the same basket+index share one slot.
-            // Differences:
-            // - Synced baskets must remain together (enforced by countElectiveSyncViolations A).
-            // - Free baskets can drift apart later during mutation (since countElectiveSyncViolations B was removed),
-            //   but placing them together initially saves space and is perfectly valid.
+            if (isSyncedBasket(session.basketName)) {
+                // SYNCED baskets (HSMC, MDM): all members share one slot
+                const existing = syncedBasketSlots.get(groupKey);
+                if (existing) {
+                    solution[i] = { day: existing.day, startBucket: existing.startBucket, roomIndex: pickRoomForSession(session, rooms) };
+                    continue;
+                }
 
-            const existing = syncedBasketSlots.get(groupKey);
-            if (existing) {
-                solution[i] = { day: existing.day, startBucket: existing.startBucket, roomIndex: pickRoomForSession(session, rooms) };
-                continue;
+                // First in synced group — pick a slot not clashing with any other basket
+                let chosenDay = 1 + dayLoad.indexOf(Math.min(...dayLoad));
+                let chosenStart = randomSafeStart(session.duration);
+                let attempts = 0;
+                while (wouldClashWithOtherBasket(session.basketName, chosenDay, chosenStart, session.duration) && attempts < 50) {
+                    chosenStart = randomSafeStart(session.duration);
+                    chosenDay = 1 + Math.floor(Math.random() * NUM_DAYS);
+                    attempts++;
+                }
+                recordBasketSlots(session.basketName, chosenDay, chosenStart, session.duration);
+                dayLoad[chosenDay - 1] += session.duration;
+                syncedBasketSlots.set(groupKey, { day: chosenDay, startBucket: chosenStart });
+                solution[i] = { day: chosenDay, startBucket: chosenStart, roomIndex: pickRoomForSession(session, rooms) };
+            } else {
+                // FREE baskets (basket-1, basket-2): each session picks its own slot
+                // Actively avoid timeslots used by OTHER baskets (cross-basket anti-clash)
+                let bestDay = 1 + dayLoad.indexOf(Math.min(...dayLoad));
+                let start = randomSafeStart(session.duration);
+                let attempts = 0;
+                while (wouldClashWithOtherBasket(session.basketName, bestDay, start, session.duration) && attempts < 50) {
+                    start = randomSafeStart(session.duration);
+                    bestDay = 1 + Math.floor(Math.random() * NUM_DAYS);
+                    attempts++;
+                }
+                recordBasketSlots(session.basketName, bestDay, start, session.duration);
+                dayLoad[bestDay - 1] += session.duration;
+                solution[i] = { day: bestDay, startBucket: start, roomIndex: pickRoomForSession(session, rooms) };
             }
-
-            // First in group — pick a slot not already used by any basket
-            const day = 1 + dayLoad.indexOf(Math.min(...dayLoad));
-            let start = randomSafeStart(session.duration);
-            let key = `${day}:${start}`;
-            let attempts = 0;
-            while (usedElectiveSlots.has(key) && attempts < 30) {
-                start = randomSafeStart(session.duration);
-                const d = 1 + Math.floor(Math.random() * NUM_DAYS);
-                key = `${d}:${start}`;
-                attempts++;
-            }
-            usedElectiveSlots.add(key);
-            const [chosenDay, chosenStart] = key.split(':').map(Number);
-            dayLoad[chosenDay - 1] += session.duration;
-            syncedBasketSlots.set(groupKey, { day: chosenDay, startBucket: chosenStart });
-            solution[i] = { day: chosenDay, startBucket: chosenStart, roomIndex: pickRoomForSession(session, rooms) };
             continue;
         }
 
@@ -227,17 +264,20 @@ export function mutateRoom(session: ClassSession, rooms: SolverInput['rooms']): 
     return { day: 0, startBucket: 0, roomIndex: pickRoomForSession(session, rooms) };
 }
 
-/** Swap two same-duration, non-elective sessions (electives are synced so swapping would break them) */
+/** Swap two same-duration sessions (electives from synced baskets are excluded to preserve sync) */
 function trySwap(offspring: Solution, sessions: ClassSession[], idx: number): void {
-    // Never swap elective sessions — it breaks sync groups
-    if (sessions[idx].isElective) return;
+    // Never swap synced-basket electives — it breaks their sync groups
+    if (sessions[idx].isElective && isSyncedBasket(sessions[idx].basketName)) return;
 
     const duration = sessions[idx].duration;
     const candidates: number[] = [];
     for (let j = 0; j < sessions.length; j++) {
-        if (j !== idx && sessions[j].duration === duration && !sessions[j].isElective) {
-            candidates.push(j);
-        }
+        if (j === idx) continue;
+        if (sessions[j].isLocked) continue;
+        if (sessions[j].duration !== duration) continue;
+        // Exclude synced-basket electives from being swap targets too
+        if (sessions[j].isElective && isSyncedBasket(sessions[j].basketName)) continue;
+        candidates.push(j);
     }
     if (candidates.length === 0) return;
 
@@ -271,8 +311,8 @@ export function mutate(parent: Solution, input: SolverInput, sigma: number): Sol
     const n = sessions.length;
     if (n === 0) return offspring;
 
-    // Build elective groups for this mutation pass
-    const electiveGroups = buildElectiveGroups(sessions);
+    // Build elective sync groups (only for synced baskets like HSMC, MDM)
+    const electiveGroups = buildSyncedElectiveGroups(sessions);
     // Reverse map: session index → sync key
     const sessionToKey = new Map<number, string>();
     for (const [key, indices] of electiveGroups) {
