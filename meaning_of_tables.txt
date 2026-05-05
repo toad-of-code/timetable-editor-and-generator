@@ -1,0 +1,49 @@
+
+Think of your database as a restaurant. Some tables hold the ingredients, some hold the recipes, and one holds the final cooked meals.
+
+### 1. The "Ingredients" (Master Data)
+
+These tables exist independently. You set them up once, and they rarely change.
+
+* **`professors` Table** (The "Who")
+* **What it holds:** The master list of all faculty members (Name, Email, Active Status).
+* **How the Engine uses it:** It reads this to know its "workforce." If a professor is marked `is_active = FALSE` (e.g., on leave), the engine will completely ignore them when generating the timetable.
+
+
+* **`subjects` Table** (The "What" & "How")
+* **What it holds:** The catalog of every course your college offers (Code, Name, Credits). Crucially, your table also holds the **L-T-P structure** (`lectures`, `tutorials`, `practicals`, `practical_duration`).
+* **How the Engine uses it:** This is the engine's primary math input. If it sees `lectures = 3` and `practicals = 1` for "CS204", the engine knows: *"I must find three 1-hour slots and one 2-hour slot for this subject."*
+
+
+
+### 2. The "Rules" (Connection Tables)
+
+These tables link your ingredients together so the engine knows what is allowed.
+
+* **`professor_expertise` Table** (The "Capability Map")
+* **What it holds:** Links `professor_id` to `subject_id`. It tells you that Dr. Smith is qualified to teach Operating Systems.
+* **How the Engine uses it:** If a subject needs a teacher, the engine looks here. It will only pick a professor who is mapped to that subject. It prevents the engine from accidentally assigning a Math professor to a Physics lab.
+
+
+
+### 3. The "Recipes" (The Blueprint Context)
+
+These tables tell the engine exactly what to cook *today*.
+
+* **`semester_clusters` Table** (The "Order Ticket")
+* **What it holds:** Groups your scheduling context. It creates a specific container like "Batch 2025 - Semester 4 - IT Department."
+* **How the Engine uses it:** When you click "Generate," you aren't generating the whole college. You pass the `cluster_id` to the engine so it knows exactly which batch it is solving for right now.
+
+
+* **`cluster_requirements` Table** (The "Shopping List")
+* **What it holds:** Links a `cluster_id` to multiple `subject_id`s.
+* **How the Engine uses it:** When solving for Semester 4, the engine looks here to find out exactly *which* 5 or 6 subjects belong to Semester 4. It then grabs their L-T-P structures from the `subjects` table and starts scheduling.
+
+
+
+### 4. The "Final Meal" (The Output)
+
+* **`timetable_slots` Table** (The "Result" & "History")
+* **What it holds:** This is where the final generated schedule lives. It links `professor_id`, `subject_id`, `room_id`, `student_group_id`, `start_time`, and `end_time` into a single, exact event.
+* **How the Engine uses it:** 1. **To Save:** When the algorithm finishes, it writes the final schedule here.
+2. **To Avoid Conflicts (Ghost Constraints):** When generating Semester 4, the engine first *reads* the `timetable_slots` of Semesters 2, 6, and 8. If Dr. Smith is already saved in a slot at 10:00 AM for Semester 6, the engine knows that 10:00 AM is blocked and won't schedule him for Semester 4 at that time.

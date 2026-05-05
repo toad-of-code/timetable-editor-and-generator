@@ -119,8 +119,10 @@ export function slotToEndTime(slot: number): string {
  * Convert a time string like "09:50" to the nearest slot number (1-indexed).
  */
 export function timeToSlot(time: string): number {
+    // Normalize to HH:MM (handles Supabase HH:MM:SS format)
+    const normalized = time.slice(0, 5);
     // Find the slot whose start time matches
-    const idx = SLOT_START_TIMES.indexOf(time);
+    const idx = SLOT_START_TIMES.indexOf(normalized);
     if (idx !== -1) return idx + 1;
 
     // Fallback: find the closest slot by comparing minutes
@@ -144,8 +146,10 @@ export function timeToSlot(time: string): number {
  * Convert an end time string like "10:50" to the nearest ending slot number (1-indexed).
  */
 export function endTimeToSlot(time: string): number {
+    // Normalize to HH:MM (handles Supabase HH:MM:SS format)
+    const normalized = time.slice(0, 5);
     // Find the slot whose end time matches
-    const idx = SLOT_END_TIMES.indexOf(time);
+    const idx = SLOT_END_TIMES.indexOf(normalized);
     if (idx !== -1) return idx + 1;
 
     // Fallback: find the closest slot by comparing minutes

@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useRef } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import {
     Loader2, Save, CheckCircle2, AlertTriangle, GripVertical,
     Undo2, Send, Pencil, Calendar, Filter, Wand2,
@@ -33,9 +33,10 @@ interface TimeColumn {
 function convertTo12Hour(time24: string): string {
     if (!time24) return '';
     const [hourStr, minute] = time24.split(':');
-    let hour = parseInt(hourStr);
-    hour = hour % 12 || 12;
-    return `${hour}:${minute}`;
+    const hourNum = parseInt(hourStr);
+    const hour = hourNum % 12 || 12;
+    const ampm = hourNum >= 12 ? 'PM' : 'AM';
+    return `${hour}:${minute} ${ampm}`;
 }
 
 // ─── Props ─────────────────────────────────────────────────────────────────────
@@ -104,6 +105,63 @@ async function getLockedSessionsData(
     return { lockedSessions, lockedGenes, lockedTimetableNames };
 }
 
+// ─── Helper: build ClassSession[] from editor slots (shared by save/feasibility/LNS) ──
+
+function buildSessionsFromSlots(
+    slots: EditorSlot[],
+    roomIdToIndex: Map<string, number>,
+) {
+    // 2+1 lecturePairIndex inference:
+    //   • A Lecture slot with duration=2 → the double-lecture block (index 0)
+    //   • A Lecture slot with duration=1, AND the same (subjectId, groupId)
+    //     has a duration=2 sibling → remainder single-lecture slot (index -1)
+    //   • Everything else → not applicable (index -2)
+    const lectureDoubleSet = new Set<string>();
+    for (const s of slots) {
+        if (s.slot_type !== 'Lecture') continue;
+        const si = SLOT_START_TIMES.indexOf(s.start_time.slice(0, 5));
+        const ei = SLOT_END_TIMES.indexOf(s.end_time.slice(0, 5));
+        if (Math.max(1, ei - si + 1) >= 2) lectureDoubleSet.add(`${s.subject_id}|${s.student_group_id}`);
+    }
+
+    return slots.map((s, i) => {
+        const startIdx = SLOT_START_TIMES.indexOf(s.start_time.slice(0, 5));
+        const endIdx = SLOT_END_TIMES.indexOf(s.end_time.slice(0, 5));
+        const duration = Math.max(1, endIdx - startIdx + 1);
+        const isElective = s.subject_type === 'Elective' || s.subject_type === 'Minor';
+        const profIsUnknown = s.professor_name === 'Unknown' || s.professor_name === 'TBD';
+
+        let lecturePairIndex = -2;
+        if (s.slot_type === 'Lecture' && !isElective) {
+            if (duration >= 2) lecturePairIndex = 0;
+            else if (lectureDoubleSet.has(`${s.subject_id}|${s.student_group_id}`)) lecturePairIndex = -1;
+        }
+
+        return {
+            id: i, subjectId: s.subject_id, subjectCode: s.subject_code,
+            groupId: s.student_group_id, professorId: profIsUnknown ? '' : (s.professor_id ?? ''),
+            duration, slotType: s.slot_type as 'Lecture' | 'Tutorial' | 'Practical',
+            homeRoomIndex: s.room_id ? (roomIdToIndex.get(s.room_id) ?? 0) : 0,
+            isElective, electiveSlotIndex: isElective ? 0 : -1,
+            basketName: null,
+            isWMCGroup: s.group_name === 'WMC' || /IT[\s-]*BI/i.test(s.group_name ?? ''),
+            lecturePairIndex,
+            studentCount: 100,
+            isLocked: false,
+        };
+    });
+}
+
+// ─── Helper: build the standard solver config used across editor operations ──
+
+function buildEditorSolverConfig() {
+    return {
+        maxGenerations: 0, reportInterval: 0, initialSigma: 2, gapWeight: 1,
+        roomUtilizationWeight: 0.8, roomUtilizationThreshold: 0.60, roomOverutilizationThreshold: 1.20,
+        hardPenalty: 1000, adaptationWindow: 50, sigmaIncrease: 1.22, sigmaDecrease: 0.82,
+    };
+}
+
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 export function EditorView({ initialTimetableId, onBack }: EditorViewProps) {
@@ -144,9 +202,12 @@ export function EditorView({ initialTimetableId, onBack }: EditorViewProps) {
     const [selectedEntity, setSelectedEntity] = useState<string>('All Sections');
     const dropdownOptions = useMemo(() => ['All Sections', ...allSections], [allSections]);
 
-    if (dropdownOptions.length > 0 && !dropdownOptions.includes(selectedEntity)) {
-        setSelectedEntity(dropdownOptions[0]);
-    }
+    // Bug #1 fix: moved setState out of render body into useEffect
+    useEffect(() => {
+        if (dropdownOptions.length > 0 && !dropdownOptions.includes(selectedEntity)) {
+            setSelectedEntity(dropdownOptions[0]);
+        }
+    }, [dropdownOptions, selectedEntity]);
 
     // ── Dynamic time columns (same pattern as TimetableViewer) ──
     const dynamicTimeColumns = useMemo(() => {
@@ -200,22 +261,36 @@ export function EditorView({ initialTimetableId, onBack }: EditorViewProps) {
         const unique: EditorSlot[] = [];
         const seen = new Set<string>();
         slots.forEach(slot => {
-            const key = `${slot.day_of_week}-${slot.start_time}-${slot.group_name}-${slot.subject_code}`;
+            const key = `${slot.day_of_week}-${slot.start_time.slice(0, 5)}-${slot.group_name}-${slot.subject_code}`;
             if (!seen.has(key)) { seen.add(key); unique.push(slot); }
         });
         return unique;
     }, [slots]);
 
     // ── Identify conflicting slot IDs (for red highlight) ──
+    // Bug #7 fix: run on processedSlots (deduplicated) so flagged IDs match rendered slots.
     const conflictSlotIds = useMemo(() => {
         const ids = new Set<string>();
         const timeOverlaps = (a: EditorSlot, b: EditorSlot) =>
             a.start_time.slice(0, 5) < b.end_time.slice(0, 5) && b.start_time.slice(0, 5) < a.end_time.slice(0, 5);
 
-        for (let i = 0; i < slots.length; i++) {
-            for (let j = i + 1; j < slots.length; j++) {
-                const a = slots[i], b = slots[j];
+        for (let i = 0; i < processedSlots.length; i++) {
+            for (let j = i + 1; j < processedSlots.length; j++) {
+                const a = processedSlots[i], b = processedSlots[j];
                 if (a.day_of_week !== b.day_of_week) continue;
+
+                const isElectiveA = a.subject_type === 'Elective' || a.subject_type === 'Minor';
+                const isElectiveB = b.subject_type === 'Elective' || b.subject_type === 'Minor';
+
+                // 1. Same-day constraints (do NOT require time overlap)
+                // 2+1 Lecture Constraint: Two core lectures of same subject & group on same day = clash
+                if (a.slot_type === 'Lecture' && b.slot_type === 'Lecture' && !isElectiveA && !isElectiveB) {
+                    if (a.subject_id === b.subject_id && a.student_group_id === b.student_group_id) {
+                        ids.add(a.id); ids.add(b.id);
+                    }
+                }
+
+                // 2. Time overlap constraints
                 if (!timeOverlaps(a, b)) continue;
 
                 // Room clash
@@ -228,8 +303,7 @@ export function EditorView({ initialTimetableId, onBack }: EditorViewProps) {
                     ids.add(a.id); ids.add(b.id);
                 }
 
-                const bothElectives = (a.subject_type === 'Elective' || a.subject_type === 'Minor') &&
-                    (b.subject_type === 'Elective' || b.subject_type === 'Minor');
+                const bothElectives = isElectiveA && isElectiveB;
 
                 // Section clash (same group)
                 if (a.student_group_id === b.student_group_id) {
@@ -239,8 +313,8 @@ export function EditorView({ initialTimetableId, onBack }: EditorViewProps) {
                 }
 
                 // WMC vs section clash
-                const aWB = a.group_name === 'WMC' || a.group_name === 'IT-BI';
-                const bWB = b.group_name === 'WMC' || b.group_name === 'IT-BI';
+                const aWB = a.group_name === 'WMC' || /IT[\s-]*BI/i.test(a.group_name ?? '');
+                const bWB = b.group_name === 'WMC' || /IT[\s-]*BI/i.test(b.group_name ?? '');
                 if (aWB !== bWB) {
                     if (!bothElectives) {
                         ids.add(a.id); ids.add(b.id);
@@ -249,7 +323,7 @@ export function EditorView({ initialTimetableId, onBack }: EditorViewProps) {
             }
         }
         return ids;
-    }, [slots]);
+    }, [processedSlots]);
 
     // ── Feasibility tracking ──
     // Moved to manual button check
@@ -306,7 +380,7 @@ export function EditorView({ initialTimetableId, onBack }: EditorViewProps) {
         }
         const newEnd = SLOT_END_TIMES[newEndIdx];
 
-        if (slot.day_of_week === newDay && slot.start_time === newStart) return;
+        if (slot.day_of_week === newDay && slot.start_time.slice(0, 5) === newStart) return;
 
         pushUndo();
         const updated = slots.map(s =>
@@ -351,39 +425,7 @@ export function EditorView({ initialTimetableId, onBack }: EditorViewProps) {
                 const roomIdToIndex = new Map<string, number>();
                 roomList.forEach((r, i) => roomIdToIndex.set(r.id, i));
 
-                const lectureDoubleSet = new Set<string>();
-                for (const s of slots) {
-                    if (s.slot_type !== 'Lecture') continue;
-                    const si = SLOT_START_TIMES.indexOf(s.start_time.slice(0, 5));
-                    const ei = SLOT_END_TIMES.indexOf(s.end_time.slice(0, 5));
-                    if (Math.max(1, ei - si + 1) >= 2) lectureDoubleSet.add(`${s.subject_id}|${s.student_group_id}`);
-                }
-
-                const sessions = slots.map((s, i) => {
-                    const startIdx = SLOT_START_TIMES.indexOf(s.start_time.slice(0, 5));
-                    const endIdx = SLOT_END_TIMES.indexOf(s.end_time.slice(0, 5));
-                    const duration = Math.max(1, endIdx - startIdx + 1);
-                    const isElective = s.subject_type === 'Elective' || s.subject_type === 'Minor';
-                    const profIsUnknown = s.professor_name === 'Unknown' || s.professor_name === 'TBD';
-                    let lecturePairIndex = -2;
-                    if (s.slot_type === 'Lecture' && !isElective) {
-                        if (duration >= 2) lecturePairIndex = 0;
-                        else if (lectureDoubleSet.has(`${s.subject_id}|${s.student_group_id}`)) lecturePairIndex = -1;
-                    }
-                    return {
-                        id: i, subjectId: s.subject_id, subjectCode: s.subject_code,
-                        groupId: s.student_group_id, professorId: profIsUnknown ? '' : (s.professor_id ?? ''),
-                        duration, slotType: s.slot_type as 'Lecture' | 'Tutorial' | 'Practical',
-                        homeRoomIndex: s.room_id ? (roomIdToIndex.get(s.room_id) ?? 0) : 0,
-                        isElective, electiveSlotIndex: isElective ? 0 : -1,
-                        basketName: null,
-                        isWMCGroup: s.group_name === 'WMC' || /IT[\s-]*BI/i.test(s.group_name ?? ''),
-                        lecturePairIndex,
-                        studentCount: 100,
-                        isLocked: false,
-                    };
-                });
-
+                const sessions = buildSessionsFromSlots(slots, roomIdToIndex);
                 const normalSessionCount = sessions.length;
 
                 // ── Fetch locked sessions from all OTHER published timetables ──
@@ -399,11 +441,7 @@ export function EditorView({ initialTimetableId, onBack }: EditorViewProps) {
 
                 const solverInput = {
                     sessions: allSessions, rooms: roomList, numDays: 5, numBuckets: 8,
-                    config: {
-                        maxGenerations: 0, reportInterval: 0, initialSigma: 2, gapWeight: 1,
-                        roomUtilizationWeight: 0.8, roomUtilizationThreshold: 0.60, roomOverutilizationThreshold: 1.20,
-                        hardPenalty: 1000, adaptationWindow: 50, sigmaIncrease: 1.22, sigmaDecrease: 0.82,
-                    },
+                    config: buildEditorSolverConfig(),
                 };
 
                 const normalSolution = solutionFromSlots(
@@ -445,57 +483,7 @@ export function EditorView({ initialTimetableId, onBack }: EditorViewProps) {
         const roomIdToIndex = new Map<string, number>();
         roomList.forEach((r, i) => roomIdToIndex.set(r.id, i));
 
-        // ── 2+1 lecturePairIndex inference ──────────────────────────────────────
-        // The editor doesn't store lecturePairIndex in the DB, but we can infer it:
-        //   • A Lecture slot with duration=2 → the double-lecture block (index 0)
-        //   • A Lecture slot with duration=1, AND the same (subjectId, groupId)
-        //     has a duration=2 sibling → remainder single-lecture slot (index -1)
-        //   • Everything else → not applicable (index -2)
-        // This lets countTwoOneLectureViolations() fire correctly in the editor.
-        const lectureDoubleSet = new Set<string>(); // "subjectId|groupId" keys that have a 2-hr lecture
-        for (const s of slots) {
-            if (s.slot_type !== 'Lecture') continue;
-            const startIdx0 = SLOT_START_TIMES.indexOf(s.start_time.slice(0, 5));
-            const endIdx0 = SLOT_END_TIMES.indexOf(s.end_time.slice(0, 5));
-            const dur0 = Math.max(1, endIdx0 - startIdx0 + 1);
-            if (dur0 >= 2) lectureDoubleSet.add(`${s.subject_id}|${s.student_group_id}`);
-        }
-
-        const sessions = slots.map((s, i) => {
-            const startIdx = SLOT_START_TIMES.indexOf(s.start_time.slice(0, 5));
-            const endIdx = SLOT_END_TIMES.indexOf(s.end_time.slice(0, 5));
-            const duration = Math.max(1, endIdx - startIdx + 1);
-            const isElective = s.subject_type === 'Elective' || s.subject_type === 'Minor';
-            const profIsUnknown = s.professor_name === 'Unknown' || s.professor_name === 'TBD';
-
-            // Infer lecturePairIndex from duration + whether a 2-hr sibling exists
-            let lecturePairIndex = -2;
-            if (s.slot_type === 'Lecture' && !isElective) {
-                if (duration >= 2) {
-                    lecturePairIndex = 0;  // this IS the double-lecture block
-                } else if (lectureDoubleSet.has(`${s.subject_id}|${s.student_group_id}`)) {
-                    lecturePairIndex = -1; // a remainder 1-hr slot (2-hr sibling exists)
-                }
-            }
-
-            return {
-                id: i, subjectId: s.subject_id, subjectCode: s.subject_code,
-                groupId: s.student_group_id, professorId: profIsUnknown ? '' : (s.professor_id ?? ''),
-                duration, slotType: s.slot_type as 'Lecture' | 'Tutorial' | 'Practical',
-                // NOTE: homeRoomIndex = current room, not the *intended* home room.
-                // countHomeRoomViolations() will always return 0 here — this is
-                // a known limitation (home room metadata isn't stored in timetable_slots).
-                homeRoomIndex: s.room_id ? (roomIdToIndex.get(s.room_id) ?? 0) : 0,
-                isElective, electiveSlotIndex: isElective ? 0 : -1,
-                // NOTE: basketName cannot be inferred from slot data — elective sync
-                // violations (countElectiveSyncViolations) will not fire in the editor.
-                basketName: null,
-                isWMCGroup: s.group_name === 'WMC' || /IT[\s-]*BI/i.test(s.group_name ?? ''),
-                lecturePairIndex,
-                studentCount: 100,
-                isLocked: false,
-            };
-        });
+        const sessions = buildSessionsFromSlots(slots, roomIdToIndex);
 
         const { lockedSessions, lockedGenes } = await getLockedSessionsData(
             timetables,
@@ -508,11 +496,7 @@ export function EditorView({ initialTimetableId, onBack }: EditorViewProps) {
 
         const solverInput = {
             sessions: allSessions, rooms: roomList, numDays: 5, numBuckets: 8,
-            config: {
-                maxGenerations: 0, reportInterval: 0, initialSigma: 2, gapWeight: 1,
-                roomUtilizationWeight: 0.8, roomUtilizationThreshold: 0.60, roomOverutilizationThreshold: 1.20,
-                hardPenalty: 1000, adaptationWindow: 50, sigmaIncrease: 1.22, sigmaDecrease: 0.82
-            },
+            config: buildEditorSolverConfig(),
         };
 
         const normalSolution = solutionFromSlots({ ...solverInput, sessions }, slots);
@@ -530,49 +514,11 @@ export function EditorView({ initialTimetableId, onBack }: EditorViewProps) {
         if (slots.length === 0) return;
         setIsLnsRunning(true);
 
-        // Build the same solver input as feasibility check
         const roomList = rooms.map(r => ({ id: r.id, name: r.name, roomType: r.room_type, capacity: r.capacity ?? 60 }));
         const roomIdToIndex = new Map<string, number>();
         roomList.forEach((r, i) => roomIdToIndex.set(r.id, i));
 
-        // ── 2+1 lecturePairIndex inference (same logic as feasibility check) ────
-        const lectureDoubleSetLns = new Set<string>();
-        for (const s of slots) {
-            if (s.slot_type !== 'Lecture') continue;
-            const si = SLOT_START_TIMES.indexOf(s.start_time.slice(0, 5));
-            const ei = SLOT_END_TIMES.indexOf(s.end_time.slice(0, 5));
-            if (Math.max(1, ei - si + 1) >= 2) lectureDoubleSetLns.add(`${s.subject_id}|${s.student_group_id}`);
-        }
-
-        const sessions = slots.map((s, i) => {
-            const startIdx = SLOT_START_TIMES.indexOf(s.start_time.slice(0, 5));
-            const endIdx = SLOT_END_TIMES.indexOf(s.end_time.slice(0, 5));
-            const duration = Math.max(1, endIdx - startIdx + 1);
-            const isElective = s.subject_type === 'Elective' || s.subject_type === 'Minor';
-            const profIsUnknown = s.professor_name === 'Unknown' || s.professor_name === 'TBD';
-
-            let lecturePairIndex = -2;
-            if (s.slot_type === 'Lecture' && !isElective) {
-                if (duration >= 2) {
-                    lecturePairIndex = 0;
-                } else if (lectureDoubleSetLns.has(`${s.subject_id}|${s.student_group_id}`)) {
-                    lecturePairIndex = -1;
-                }
-            }
-
-            return {
-                id: i, subjectId: s.subject_id, subjectCode: s.subject_code,
-                groupId: s.student_group_id, professorId: profIsUnknown ? '' : (s.professor_id ?? ''),
-                duration, slotType: s.slot_type as 'Lecture' | 'Tutorial' | 'Practical',
-                homeRoomIndex: s.room_id ? (roomIdToIndex.get(s.room_id) ?? 0) : 0,
-                isElective, electiveSlotIndex: isElective ? 0 : -1,
-                basketName: null,
-                isWMCGroup: s.group_name === 'WMC' || /IT[\s-]*BI/i.test(s.group_name ?? ''),
-                lecturePairIndex,
-                studentCount: 100,
-                isLocked: false,
-            };
-        });
+        const sessions = buildSessionsFromSlots(slots, roomIdToIndex);
 
         const { lockedSessions, lockedGenes } = await getLockedSessionsData(
             timetables,
@@ -585,11 +531,7 @@ export function EditorView({ initialTimetableId, onBack }: EditorViewProps) {
 
         const solverInput = {
             sessions: allSessions, rooms: roomList, numDays: 5, numBuckets: 8,
-            config: {
-                maxGenerations: 0, reportInterval: 0, initialSigma: 2, gapWeight: 1,
-                roomUtilizationWeight: 0.8, roomUtilizationThreshold: 0.60, roomOverutilizationThreshold: 1.20,
-                hardPenalty: 1000, adaptationWindow: 50, sigmaIncrease: 1.22, sigmaDecrease: 0.82
-            },
+            config: buildEditorSolverConfig(),
         };
 
         const normalSolution = solutionFromSlots({ ...solverInput, sessions }, slots);
@@ -599,13 +541,13 @@ export function EditorView({ initialTimetableId, onBack }: EditorViewProps) {
         if (result && result.fitness.total < (feasibility?.fitness?.total ?? Infinity)) {
             pushUndo();
             // Convert Gene[] back to slot updates
+            // Bug #3 fix: use session.duration from the sessions array instead of
+            // reverse-computing from old slot times (which is fragile with mixed formats).
             const newSlots = slots.map((slot, i) => {
                 const gene = result.solution[i];
+                const dur = sessions[i].duration;
                 const newDay = gene.day;
                 const newStartTime = SLOT_START_TIMES[gene.startBucket - 1] ?? slot.start_time;
-                const startIdx2 = SLOT_START_TIMES.indexOf(slot.start_time.slice(0, 5));
-                const endIdx2 = SLOT_END_TIMES.indexOf(slot.end_time.slice(0, 5));
-                const dur = Math.max(1, endIdx2 - startIdx2 + 1);
                 const newEndIdx = gene.startBucket - 1 + dur - 1;
                 const newEndTime = SLOT_END_TIMES[newEndIdx] ?? slot.end_time;
                 const newRoom = roomList[gene.roomIndex];

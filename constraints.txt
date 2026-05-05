@@ -1,0 +1,166 @@
+═══════════════════════════════════════════════════════════════════
+              TIMETABLE SOLVER — CONSTRAINT REFERENCE
+═══════════════════════════════════════════════════════════════════
+
+File: src/solver/constraints.ts
+Solver: (1+1)-ES (Evolutionary Strategy)
+Fitness = (Hard Violations × Hard Penalty) + (Gap Penalty × Gap Weight) + (Room Util Penalty × Util Weight)
+
+
+───────────────────────────────────────────────────────────────────
+                        HARD CONSTRAINTS
+───────────────────────────────────────────────────────────────────
+  Hard violations MUST be exactly 0 for the timetable to be feasible.
+
+  1. TIME BOUNDARY
+     Function: countTimeBoundaryViolations()
+     Rule:     A session must absolutely not exceed the final slot of the day.
+               endSlot = startSlot + duration - 1 must be ≤ 8 (18:30).
+
+  2. BREAK / LUNCH CROSSING
+     Function: countBreakViolations()
+     Rule:     A continuous multi-slot session (like a 2-hour lab) must NOT 
+               span across a structural break.
+               • Slot 2 → Slot 3  (10:50 – 11:00 break)
+               • Slot 4 → Slot 5  (13:00 – 14:30 lunch)
+               (Single-slot 1-hour sessions are naturally exempt).
+
+  3. ROOM NON-OVERLAP
+     Function: countRoomOverlaps()
+     Rule:     A physical room can host at most ONE session at any (day, slot).
+               Multiple sessions placed in the same room simultaneously cause clashes.
+
+  4. PROFESSOR NON-OVERLAP
+     Function: countProfessorOverlaps()
+     Rule:     A distinct professor can teach at most ONE session at any (day, slot).
+
+  5. STUDENT GROUP (SECTION) NON-OVERLAP
+     Function: countGroupOverlaps()
+     Rule:     A specific section of students can attend at most ONE session at 
+               any given (day, slot).
+     Exception: Concurrent sessions from different synced baskets are allowed here 
+                because they are handled separately by the anti-clash rule below.
+
+  6. ELECTIVE RULES & SYNCHRONIZATION
+     Function: countElectiveSyncViolations()
+     Rule A (Sync): All elective classes belonging to a predefined "Synced Basket" 
+                    (e.g., HSMC or MDM) MUST be scheduled at the exact same (day, slot).
+                    This allows students from different sections to scatter and 
+                    attend the elective they chose.
+     Rule B (Free): Electives in "Free Baskets" (basket-1, basket-2, etc.) can be
+                    scheduled independently — some may overlap, others at different
+                    times. The solver is free to spread them across slots for better
+                    room utilization.
+     Rule C (Anti-Clash): Sessions from DIFFERENT baskets (e.g., Basket-1 vs Basket-2) 
+                          must never overlap. This guarantees a student can safely pick 
+                          one subject from Basket 1 and another from Basket 2 without overlap.
+
+  7. LAB ROOM FOR PRACTICALS
+     Function: countLabRoomViolations()
+     Rule:     If a sessions slot_type is 'Practical', it MUST be assigned to a room 
+               where the room_type is explicitly 'Lab'. Normal classrooms are invalid.
+
+  8. HOME ROOM FOR LECTURES/TUTORIALS
+     Function: countHomeRoomViolations()
+     Rule:     Core theoretical lectures and tutorials MUST occur in the designated 
+               'Home Room' specifically assigned to that section/group. 
+               (Practicals and Electives are exempt from this).
+
+  9. WMC (WHOLE BATCH) VS SECTION
+     Function: countWMCSectionOverlaps()
+     Rule:     If a session is flagged as WMC (meaning the entire batch must attend, 
+               like a mass guest lecture), no individual sub-section belonging to 
+               that batch can have an independent class scheduled at that time.
+
+  10. 2+1 LECTURE FORMAT
+     Function: countTwoOneLectureViolations()
+     Rule:     For core (non-elective) subjects with lectures >= 2, the lecture
+               hours are split into:
+                 • Exactly ONE 2-hour double-lecture block (lecturePairIndex = 0)
+                 • All remaining hours as individual 1-hour sessions (lecturePairIndex = -1)
+               Example breakdown:
+                 lectures=2  →  one 2-hr session (total: 1 session)
+                 lectures=3  →  one 2-hr + one 1-hr (total: 2 sessions)
+                 lectures=4  →  one 2-hr + two 1-hr (total: 3 sessions)
+               The constraint enforces that no two lecture sessions for the
+               same subject+group fall on the same day. This guarantees the
+               2-hr block and the 1-hr remainder(s) are spread across different
+               days, preventing overloading a single day with the same subject.
+               Elective lectures, tutorials, and practicals are NOT affected.
+
+
+───────────────────────────────────────────────────────────────────
+                        SOFT CONSTRAINTS
+───────────────────────────────────────────────────────────────────
+  Soft penalties are optimized to make schedules nicer, but do not invalidate them.
+
+  1. STUDENT GAP PENALTY (COMPRESSION)
+     Function: computeGapPenalty()
+     Rule:     The solver scans every student groups daily schedule from their first 
+               arrival slot to their final departure slot. For every empty "free" slot 
+               in between, a penalty is added. The solver actively tries to minimize this 
+               to compress the students day and remove awkward waiting periods on campus.
+
+  2. ROOM UTILIZATION PENALTY
+     Function: computeRoomUtilizationPenalty()
+     Rule:     For each session, the solver checks how well the assigned rooms capacity
+               matches the number of students attending (studentCount / roomCapacity).
+               — If the fill ratio drops below 60%, a graduated penalty is applied
+                 (under-utilization: wasteful big room for small class)
+               — If the fill ratio exceeds 120%, a graduated penalty is applied
+                 (over-utilization: room too small for the class)
+               Example (under): Room cap = 100, students = 10 → util = 10% → penalty = 50
+               Example (over):  Room cap = 50, students = 80 → util = 160% → penalty = 40
+     Config:   roomUtilizationWeight = 0.8
+               roomUtilizationThreshold = 0.60 (60% minimum fill)
+               roomOverutilizationThreshold = 1.20 (120% maximum fill)
+     Note:     Locked sessions (from published timetables) are exempt.
+
+
+───────────────────────────────────────────────────────────────────
+                      TIME MODEL (1-HOUR SLOTS)
+───────────────────────────────────────────────────────────────────
+
+  Slot 1:  08:50 – 09:50
+  Slot 2:  09:50 – 10:50
+    [BREAK: 10:50 – 11:00]
+  Slot 3:  11:00 – 12:00
+  Slot 4:  12:00 – 13:00
+    [LUNCH: 13:00 – 14:30]
+  Slot 5:  14:30 – 15:30
+  Slot 6:  15:30 – 16:30
+  Slot 7:  16:30 – 17:30
+  Slot 8:  17:30 – 18:30
+
+  Days: Mon–Fri (1–5)
+
+
+───────────────────────────────────────────────────────────────────
+                      MUTATOR BEHAVIORS
+───────────────────────────────────────────────────────────────────
+
+  • Mutate Time: Uses dynamic (1+1)-ES σ (sigma) via the 1/5th Rule context.
+  • Sync Lock: Day, Time, and Relocate mutations forcibly drag entire synced 
+    elective baskets with them to keep them synchronized.
+  • Swap: Only allowed to swap core classes with identical durations. 
+    Electives cannot be swapped.
+  • Break Snap: Time mutations that push a class over a break boundary automatically 
+    snap the class to the nearest safe valid slot.
+
+═══════════════════════════════════════════════════════════════════
+make groups in baskets
+
+mtech spec core or elec every subject
+uniform groups among basktes
+
+all metch busy  cannot  with btech lab -soft cons
+same half not teacher-soft cons
+
+//minor btech is mba core
+
+9-11 lbs mtech lec
+11-1 btech max lecture and mtech labs
+
+finl yera lec 9-11 and 4;30 -6:30
+
+shailendra 

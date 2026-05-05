@@ -30,5 +30,4 @@ dist-ssr
 *.csv
 Thumbs.db
 client_secret_*.json
-*.txt
 !requirements.txt

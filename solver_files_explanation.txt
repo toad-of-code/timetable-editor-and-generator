@@ -1,0 +1,50 @@
+The `src/solver` folder contains the entire mathematical engine and logic for generating and auto-fixing timetables. It is designed mechanically, splitting data preparation, core mathematical evolution, and user-interface interactions into distinct files.
+
+Here is what each file does:
+
+### 1. `types.ts`
+**Purpose:** The Foundation / Dictionary
+* This file holds all the TypeScript interfaces and types used across the entire solver. 
+* It defines exactly what a `ClassSession` looks like (e.g., duration, group ID, elective status), what a `Solution` (an array of `Gene` coordinates) is, and what a `FitnessResult` contains (hard vs. soft penalties). 
+* **Analogy:** It's the dictionary that ensures every other file speaks the exact same language when talking about parts of a timetable.
+
+### 2. `constants.ts`
+**Purpose:** The Rulebook
+* This file stores all the immutable, hardcoded facts about the theoretical timetable grid.
+* It defines things like `SLOTS_PER_DAY = 8`, `NUM_DAYS = 5`, and the `BREAK_AFTER_SLOTS` array (e.g., slot 2 and slot 4). 
+* It also includes helper functions to convert raw times like `"08:50"` into mathematical bucket integers (e.g., `1`, `2`, `3`) that the solver can actually calculate against.
+
+### 3. `dataPrep.ts`
+**Purpose:** The Translator
+* The user interface and database deal with complex, nested JSON objects (like `SemesterData`, `SubjectTable`, `Rooms`). The mathematical solver doesn't care about names or strings—it only cares about abstract integers and durations.
+* `dataPrep.ts` acts as the translator. It takes the messy UI data and flattens it into clean `SolverInput` objects (arrays of `ClassSession`, `rooms`, and `professors`).
+* Crucially, it calculates "Basket Names" for electives and figures out the complex mappings of Home Rooms and WMC constraints before the solver ever starts.
+
+### 4. `constraints.ts`
+**Purpose:** The Judge / Scorer
+* This file contains the all-important `evaluate()` function.
+* It reads a proposed `Solution` (timetable) and scores it by counting every single violation. It contains individual functions for every rule: `countRoomOverlaps`, `countBreakViolations`, `countElectiveSyncViolations`, etc.
+* It returns the final `FitnessResult` (Total Penalties). If the hard violations equal `0`, this file tells the solver it has successfully finished the job.
+
+### 5. `mutations.ts`
+**Purpose:** The Mover / Shaker
+* This file contains the logic for creating the initial random timetable (`generateInitialSolution()`) and the logic for altering timetables during the loop.
+* It houses the `mutate()` function which decides mathematically how drastically to shift classes around based on the current $\sigma$ (sigma) value.
+* It strictly controls things like forcing Practicals into Lab rooms and keeping synced electives moving together.
+
+### 6. `solver.ts`
+**Purpose:** The Engine / Loop
+* This is the beating heart. It contains the core `runSolver()` asynchronous loop.
+* It brings everything together: It asks `mutations.ts` for an offspring, asks `constraints.ts` to score it, and then applies the **1/5th Adaptation Rule** to adjust $\sigma$ based on success rates.
+* It repeats this process thousands of times, occasionally yielding to the browser (using `setTimeout`) so the user's screen doesn't freeze, until a perfect timetable is found or the maximum generation limit is hit.
+
+### 7. `localSearch.ts`
+**Purpose:** The Editor's Quick-Fix
+* While `solver.ts` generates perfect schedules from scratch, `localSearch.ts` is specifically built for the manual drag-and-drop UI.
+* It contains `runLNS` (for quickly fixing a single dropped class) and `runFullLNS` (for the "Auto-Fix Clashes" button). 
+* Instead of running millions of generations across the whole board, these functions identify only the clashing pieces, "destroy" them, and climb the penalty hill to quickly repair the specific holes without ruining the user's manual work.
+
+### 8. `solverLog.ts`
+**Purpose:** The Debugger
+* This is a utility file entirely for developers. It formats the abstract integer outputs of the solver back into human-readable strings (e.g., translating `roomIndex: 3` back to `"Lab 102"`) and logs them nicely to the browser console.
+* It's used to trace exactly *why* a timetable is failing by printing out the specific constraint violations step-by-step.

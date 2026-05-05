@@ -106,11 +106,23 @@ export function useEditorData(initialTimetableId?: string): EditorData {
         return () => { cancelled = true; };
     }, [refreshKey]);
 
+    // ── 1b. Sync timetable meta when timetables or selection changes ──
+    useEffect(() => {
+        if (!selectedTimetableId) {
+            setTimetableMeta(null);
+            return;
+        }
+        const meta = timetables.find(t => t.id === selectedTimetableId) ?? null;
+        setTimetableMeta(meta);
+    }, [selectedTimetableId, timetables]);
+
     // ── 2. Load slots for selected timetable ──
+    // A dedicated counter to trigger re-fetch after save (Bug #2 fix).
+    const [slotFetchKey, setSlotFetchKey] = useState(0);
+
     useEffect(() => {
         if (!selectedTimetableId) {
             setSlots([]);
-            setTimetableMeta(null);
             return;
         }
 
@@ -119,10 +131,6 @@ export function useEditorData(initialTimetableId?: string): EditorData {
             setLoadingSlots(true);
             setError(null);
             try {
-                // Load meta
-                const meta = timetables.find(t => t.id === selectedTimetableId) ?? null;
-                if (!cancelled) setTimetableMeta(meta);
-
                 // Load slots with joined names
                 const { data, error: slotErr } = await supabase
                     .from('timetable_slots')
@@ -179,7 +187,7 @@ export function useEditorData(initialTimetableId?: string): EditorData {
         }
         loadSlots();
         return () => { cancelled = true; };
-    }, [selectedTimetableId, timetables]);
+    }, [selectedTimetableId, slotFetchKey]);
 
     // ── 3. Save edited slots back to DB ──
     const saveSlots = useCallback(async (editedSlots: EditorSlot[]) => {
@@ -210,6 +218,10 @@ export function useEditorData(initialTimetableId?: string): EditorData {
                 .from('timetable_slots')
                 .insert(rows);
             if (insErr) throw insErr;
+
+            // Re-fetch slots from DB to get fresh UUIDs (Bug #2 fix).
+            // This ensures local state has the actual DB IDs after delete+re-insert.
+            setSlotFetchKey(k => k + 1);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to save');
             throw err;
