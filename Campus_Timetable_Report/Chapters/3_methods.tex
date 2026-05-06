@@ -4,7 +4,7 @@
 
 %----------------------------------------------------------------------------------------
 
-The IIITA Timetabling System utilizes a modern, browser-based stack selected to prioritize high-performance data processing and strict referential integrity. This chapter outlines the technical foundation, focusing on tools that facilitate complex client-side computation and the normalization of legacy institutional data.
+The IIITA Timetabling System utilizes a modern, browser-based stack selected to prioritize high-performance data processing and strict referential integrity. This chapter outlines the technical foundation, focusing on tools that facilitate complex client-side computation and the normalization of institutional data.
 
 \begin{table}[htbp]
 \centering
@@ -51,10 +51,11 @@ Excel Parsing & SheetJS (xlsx) & Heuristic extraction of semantic meaning from l
 \label{fig:system_architecture}
 \end{figure}
 
-The UI is designed to manage high-density data interactions without performance degradation. To achieve this, the system leverages React's virtual DOM and TypeScript's static typing.
+The user interface is created with the ability to handle dense data interactions without a drop in performance. This is accomplished through the use of React's virtual DOM and TypeScript static type checking.
 
 \subsection{Performance and Data Reliability}
-The system employs the \texttt{useMemo} hook to memoize expensive computations—such as $O(N^2)$ clash detection—ensuring these logic-heavy tasks only execute when the underlying timetable data changes. TypeScript is used to define rigid data interfaces, such as the \texttt{ParsedSlot}, ensuring the heuristic Excel parser outputs structured, predictable data.
+
+For expensive operations like $O(N^2)$ clash detection, memoization of these logic-driven functions is done using the \texttt{useMemo} hook, such that these functions are run only if the data from the timetable has been modified. TypeScript is utilized for strict data interfaces, like \texttt{ParsedSlot}.
 
 \begin{verbatim}
 // Example TypeScript Interface for Solver Data Contracts
@@ -70,41 +71,40 @@ interface ParsedSlot {
 \end{verbatim}
 
 %-----------------------------------
-\section{Build and Styling: Vite and Tailwind CSS}
+\section{Construction and Styling: Vite and Tailwind CSS}
 
-The development workflow and visual layer are optimized for rapid iteration and dynamic feedback.
+Both the construction and styling processes are designed to facilitate fast iterations and immediate feedback loops.
 \begin{itemize}
-    \item \textbf{Vite:} Leverages native ES Modules for near-instantaneous hot-module replacement (HMR), critical during the refinement of grid-generation algorithms.
-    \item \textbf{Tailwind CSS:} A utility-first framework that allows the system to dynamically apply visual alerts, such as red ring borders for clashing sessions, directly within the React components.
+    \item \textbf{Vite:} Utilizes native ES Modules, enabling hot module replacement (HMR) almost instantaneously, which is essential during the optimization of grid generation algorithms.
+    \item \textbf{Tailwind CSS:} The utility-based CSS framework makes it possible for the application to provide real-time styling feedback, such as a red border around conflicting sessions.
 \end{itemize}
 
 %-----------------------------------
-\section{Backend and Data Ingestion: Supabase}
+\section{Back-end and Data Ingestion: Supabase}
 
-The system replaces static files with a centralized PostgreSQL database hosted on Supabase, ensuring referential integrity through foreign key constraints.
+Static files are replaced with a central PostgreSQL database provided by Supabase with referential integrity enforced using foreign keys.
 \begin{itemize}
-    \item \textbf{Heuristic Parsing:} The \texttt{xlsx} (SheetJS) library is used to read raw institutional spreadsheets. These are processed by a custom engine to extract semantic meaning, such as L-T-P credit structures and complex faculty assignments.
-    \item \textbf{Authentication:} Secure access for administrators is managed natively by Supabase Auth, with state handled via a global \texttt{AuthContext} provider.
+    \item \textbf{Heuristic Parsing:} The \texttt{xlsx} (SheetJS) package is utilized to parse institutional spreadsheets in their raw form. This information is interpreted using an in-house heuristic engine to derive its semantics, such as credit structures in the form of L-T-P and faculty mapping.
+    \item \textbf{Authentication:} Authentication for administrators is achieved through Supabase Auth, which is implemented with state management through a global \texttt{AuthContext}.
 \end{itemize}
 
 %-----------------------------------
-\section{Solver Engine: Pure TypeScript Architecture}
+\section{Solver Engine: Architecture of Pure TypeScript}
 
-The core contribution of this system is its pure-TypeScript solver engine, which runs directly in the browser. This eliminates the need for server-side optimization and allows for real-time schedule generation. The solver is organized into discrete submodules:
+The most important aspect of the current solution is its pure-TypeScript solver engine, which works directly in the browser. It doesn’t require any optimizations on the server side, enabling live generation of schedules. Solver consists of several modules:
 
 \begin{itemize}
-    \item \textbf{\texttt{dataPrep.ts}}: Expands high-level credits into individual sessions and applies the 2+1 lecture format.
-    \item \textbf{\texttt{constraints.ts}}: Evaluates solutions against ten hard and three soft constraints.
-    \item \textbf{\texttt{mutations.ts}}: Implements five mutation operators, including day reassignment and Gaussian time shifts.
-    \item \textbf{\texttt{solver.ts}}: Manages the (1+1)-ES loop, elitist selection, and stagnation restarts.
-    \item \textbf{\texttt{localSearch.ts}}: Provides the LNS auto-fix routine for the interactive editor.
-\end{itemize}
+    \item \textbf{\texttt{dataPrep.ts}}: Breaks up high-level credits into individual sessions, applying the 2+1 rule of lectures.
+    \item \textbf{\texttt{constraints.ts}}: Checks the solutions based on ten hard and three soft constraints.
+    \item \textbf{\texttt{mutations.ts}}: Contains five different mutation operators, such as session day changing and Gaussian time shift.
+    \item \textbf{\texttt{solver.ts}}: Works as a control center, managing the (1+1)-ES process, elitism, and restarts from stagnation.
+    \item \textbf{\texttt{localSearch.ts
 
 %-----------------------------------
-\section{External Integrations: Reporting and Export}
+\section{External Integration: Reporting and Exporting}
 
-To support administrative workflows, the system integrates with external reporting tools:
+For workflow efficiency purposes, the system has the following integrations with external reporting systems:
 \begin{itemize}
-    \item \textbf{Google Sheets API:} Exports formatted schedules with frozen headers and color-coded session types directly to Google Drive.
-    \item \textbf{PDF Generation:} Captures high-fidelity snapshots of the timetable grid using \texttt{html-to-image} and \texttt{jsPDF} for immediate offline use.
-\end{itemize}
+    \item \textbf{Google Sheets API:} Enables exportation of schedules to Google Drive in a frozen header format with session coloring.
+    \item \textbf{PDF Output:} Makes use of \texttt{html-to-image} and \texttt{jsPDF} libraries for snapshot output of the timetable into PDF form.
+\end{item

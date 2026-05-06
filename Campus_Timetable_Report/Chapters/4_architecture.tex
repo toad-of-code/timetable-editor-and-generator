@@ -110,15 +110,15 @@ The \texttt{timetable\_slots} table is the primary junction table connecting tim
 \end{tabularx}
 \end{table}
 
-To support automated generation, the schema includes mapping tables used by the solver engine:
+In order to facilitate the automated generation process, the schema contains a series of mapping tables that are utilized by the solver engine:
 \begin{itemize}
-    \item \textbf{\texttt{semester\_clusters}:} Groups subjects by batch, semester, and department to define the scope of a scheduling task.
-    \item \textbf{\texttt{cluster\_requirements}:} Maps subjects to clusters, specifying elective groups and estimated enrollment for room allocation constraints.
-    \item \textbf{\texttt{professor\_expertise}:} Defines which subjects a professor can teach and their associated preference levels.
+    \item \textbf{\texttt{semester\_clusters}:} Clusters together subjects based on batch, semester, and department to determine the scope of the schedule.
+    \item \textbf{\texttt{cluster\_requirements}:} Establishes mappings of subjects to clusters with electives and estimates of the number of students enrolled.
+    \item \textbf{\texttt{professor\_expertise}:} Determines the subjects that a professor is able to teach along with their preferences.
 \end{itemize}
 
 \subsection{Solver Data Structures}
-The solver engine operates on a specific set of TypeScript interfaces that represent the scheduling problem as a Genetic Algorithm chromosome. Figure~\ref{fig:class_diagram} shows the relationships between these core interfaces.
+The solver engine works off a specific set of TypeScript interfaces which model the scheduling problem into a Genetic Algorithm chromosome. See Figure~\ref{fig:class_diagram} for details of the interfaces involved.
 
 \begin{figure}[htbp]
 \centering
@@ -247,25 +247,33 @@ The system includes a data ingestion module (\texttt{TimetableImporter}) to pars
 \end{figure}
 
 \begin{enumerate}
-    \item \textbf{Binary Parsing:} Uses the \texttt{SheetJS} library to read `.xlsx` files and convert them into JSON arrays.
-    \item \textbf{Header Synchronization:} Identifies time-slot boundaries from the header row, supporting various time formats and identifying merged cells for multi-hour sessions.
-    \item \textbf{Metadata Extraction:} Uses Regular Expressions to identify subject codes, faculty names, and credit structures. It handles complex strings such as split-section assignments.
-    \item \textbf{Grid Traversal:} Maps grid cells to specific days and times, extracting room and section information.
-    \item \textbf{Review and Commit:} Provides an interface for manual correction before performing bulk \texttt{UPSERT} operations to Supabase.
+    \item \textbf{Parsing Binary Files:} Uses the `SheetJS` library to parse `.xlsx` files and convert them to JSON arrays.
+    \item \textbf{Header Synchronization:} Detects time-slot boundaries from the header row, accommodating different time formats and determining merged cells that contain multi-hour slots.
+    \item \textbf{Extracting Metadata:} Uses Regular Expressions to determine the subjects, instructors, and credit formats. Deals with advanced strings containing multiple sections in one assignment.
+    \item \textbf{Traversing the Grid:} Converts each grid cell to its corresponding day and time slot, along with room number and section data.
+    \item \textbf{Review and Commit:} Offers a user interface for manual editing before executing batch UPSERT actions on Supabase.
 \end{enumerate}
 
 %-----------------------------------
-The application uses state-based view management rather than traditional URL routing. A central `currentView` state in the root component determines the active module.
-\begin{itemize}
-    \item \texttt{import}: Mounts the \texttt{TimetableImporter}.
-    \item \texttt{generator}: Mounts the multi-step \texttt{GeneratorView} wizard for automated timetable creation.
-    \item \texttt{editor}: Mounts the interactive \texttt{EditorView} for drag-and-drop timetable refinement with LNS auto-fix.
-    \item \texttt{student}: Mounts the \texttt{TimetableViewer} (All Students administrative view).
-    \item \texttt{prof}: Mounts the \texttt{ProfessorTimetableViewer}.
-    \item \texttt{room}: Mounts the \texttt{RoomTimetableViewer}.
-    \item \texttt{master-room}: Mounts the campus-wide \texttt{MasterRoomViewer}.
-    \item \texttt{free-room}: Mounts the \texttt{FreeRoomViewer}.
-    \item \texttt{report-card}: Mounts the \texttt{ReportCardView}.
-\end{itemize}
+There is no URL-based navigation; instead, state-based view management is used. The currentView state in the root component controls which module is active.
 
-This approach ensures that only the logic and data required for the active module are loaded. Custom hooks (\texttt{useGeneratorData}, \texttt{useEditorData}) manage data fetching and caching, separating the data layer from the UI components.
+\begin{itemize}
+
+    \item \texttt{import}: Renders the \texttt{TimetableImporter} view.
+
+    \item \texttt{generator}: Renders the \texttt{GeneratorView} wizard with multiple steps to generate a timetable automatically.
+
+    \item \texttt{editor}: Renders the \texttt{EditorView} where the user can create a timetable using LNS drag-and-drop with automatic fixing.
+
+    \item \texttt{student}: Renders the \texttt{TimetableViewer} view (for All Students administrative view).
+
+    \item \texttt{prof}: Renders the \texttt{ProfessorTimetableViewer} view.
+
+    \item \texttt{room}: Renders the \texttt{RoomTimetableViewer} view.
+
+    \item \texttt{master-room}: Renders the \texttt{MasterRoomViewer} view.
+
+    \item \texttt{free-room}: Renders the \texttt{FreeRoomViewer} view.
+
+    \item \
+    This makes sure that only the code necessary for the active module is loaded. The custom hooks (\texttt{useGeneratorData}, \texttt{useEditorData}) handle data loading and caching, which keeps the data and user interface layers separate.
