@@ -1,0 +1,14 @@
+\addvspace {10\p@ }
+\addvspace {10\p@ }
+\contentsline {table}{\numberline {2.1}{\ignorespaces Comparison of Timetabling Methodologies}}{15}{table.caption.37}%
+\addvspace {10\p@ }
+\contentsline {table}{\numberline {3.1}{\ignorespaces Summary of the Technology Stack}}{16}{table.caption.39}%
+\addvspace {10\p@ }
+\contentsline {table}{\numberline {4.1}{\ignorespaces Schema Specification for \texttt {timetable\_slots}}}{29}{table.caption.61}%
+\addvspace {10\p@ }
+\contentsline {table}{\numberline {5.1}{\ignorespaces Types of Scheduling Clashes Detected}}{35}{table.caption.80}%
+\contentsline {table}{\numberline {5.2}{\ignorespaces Role-Based Component Mapping and Data Scope}}{37}{table.caption.90}%
+\contentsline {table}{\numberline {5.3}{\ignorespaces Hard Constraints Enforced by the Solver}}{42}{table.caption.104}%
+\addvspace {10\p@ }
+\contentsline {table}{\numberline {6.1}{\ignorespaces System Limitations and Future Enhancements}}{54}{table.caption.148}%
+\addvspace {10\p@ }

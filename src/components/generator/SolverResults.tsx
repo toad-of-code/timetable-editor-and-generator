@@ -36,11 +36,12 @@ export function SolverResults({ result, sessionCount, timetableName, onNameChang
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-2 sm:grid-cols-6 gap-3 text-center mb-4">
+            <div className="grid grid-cols-2 sm:grid-cols-7 gap-3 text-center mb-4">
                 <ResultStat icon={<Zap className="w-4 h-4" />} label="Total Fitness" value={result.fitness.total.toFixed(0)} />
                 <ResultStat icon={<AlertTriangle className="w-4 h-4" />} label="Hard Violations" value={String(result.fitness.hardViolations)} color={feasible ? 'text-green-700' : 'text-red-600'} />
                 <ResultStat icon={<Clock className="w-4 h-4" />} label="Gap Penalty" value={String(result.fitness.gapPenalty)} />
                 <ResultStat icon={<Zap className="w-4 h-4" />} label="Room Util." value={String(result.fitness.roomUtilizationPenalty)} />
+                <ResultStat icon={<Clock className="w-4 h-4" />} label="Prof Same-Half" value={String(result.fitness.professorSameHalfPenalty)} />
                 <ResultStat icon={<Zap className="w-4 h-4" />} label="Best @ Gen" value={result.bestGeneration.toLocaleString()} />
                 <ResultStat icon={<Clock className="w-4 h-4" />} label="Time" value={`${elapsed}s`} />
             </div>

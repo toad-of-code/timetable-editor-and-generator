@@ -1,0 +1,56 @@
+% Chapter 6
+
+\chapter{Conclusion and Future Work} % Main chapter title
+
+\label{Chapter6} % For referencing the chapter elsewhere, use \ref{Chapter6}
+
+%----------------------------------------------------------------------------------------
+
+The administration of university timetables is a complex logistical challenge that directly impacts the daily lives of students, faculty, and administrative staff. This thesis detailed the design, architecture, and implementation of the IIITA Timetabling System, a modern web-based platform built to digitize, analyze, generate, edit, and distribute academic schedules efficiently. 
+
+%-----------------------------------
+\section{Summary of Contributions}
+
+The primary contribution of this project is the successful transition from static, error-prone spreadsheet management to a dynamic, intelligent, cloud-synchronized platform capable of both automated schedule generation and interactive refinement. 
+
+Specific achievements include:
+\begin{itemize}
+    \item \textbf{Heuristic Ingestion Engine:} The development of a robust Excel parsing module capable of interpreting human-formatted spreadsheets. By utilizing heuristic rules to detect headers, extract metadata, and resolve cell merges, the system drastically reduces the friction of onboarding legacy data into a structured PostgreSQL database.
+    \item \textbf{Real-Time Conflict Resolution:} The implementation of a multi-dimensional $O(N^2)$ clash detection algorithm that automatically surfaces Room, Professor, Section, and WMC-Section overlaps. This feature alone significantly reduces the administrative burden of manually verifying schedule integrity.
+    \item \textbf{(1+1)-ES Automated Solver:} The implementation of a fully functional timetable generator using a (1+1) Evolution Strategy algorithm. The solver evaluates candidate schedules against a comprehensive fitness function comprising ten hard constraints (room, professor, and group non-overlap; break/lunch boundary enforcement; lab-room assignment; elective basket synchronization; WMC-section isolation; home-room binding; the 2+1 lecture format; and time boundary compliance) and three soft constraints (student schedule gaps, room utilization efficiency, and professor same-half-day avoidance). The algorithm employs Rechenberg's 1/5th success rule for adaptive step-size control and a stagnation restart mechanism.
+    \item \textbf{Interactive Timetable Editor:} The development of a drag-and-drop editing interface with real-time conflict visualization, inline room and professor editing, a 30-level undo stack, and a Large Neighbourhood Search (LNS) auto-fix routine that targets clashing sessions. The editor's Master View provides cross-semester constraint awareness by overlaying slots from all published timetables.
+    \item \textbf{Multi-Step Generator Wizard:} The creation of a guided configuration workflow enabling administrators to select semester clusters, auto-map home rooms using a floor-based naming policy, assign professors via an interactive matrix with expertise-based filtering, and configure seed and locked timetables before launching the solver.
+    \item \textbf{Cross-Semester Constraint Awareness:} The implementation of locked sessions from published timetables, enabling the solver and editor to detect and avoid room and professor conflicts across independently scheduled semesters.
+    \item \textbf{Stakeholder-Specific Interfaces:} The creation of dynamic, role-based visualization components. The personalized ``Student Custom Timetable'' with localized preference persistence, the dedicated ``Professor View,'' and the macro-level ``Master Occupancy'' and ``Free Room Finder'' views ensure that every user receives actionable data without cognitive overload.
+    \item \textbf{Modern Technical Architecture:} The deployment of a high-performance frontend utilizing React 19, TypeScript, and Vite, paired with a serverless Supabase backend. This stack ensures the application is highly responsive, strictly typed, and easily maintainable.
+    \item \textbf{Professional Export Capabilities:} The integration of client-side PDF generation and automated Google Sheets API formatting, bridging the gap between dynamic web views and the necessity for static, offline documentation.
+\end{itemize}
+
+%----------------------------------------------------------------------------------------
+\section{Current Limitations and Proposed Enhancements}
+
+While the current system represents a massive upgrade over traditional methods, several limitations define the boundaries of the current implementation. These limitations directly inform the proposed future work, as summarized in Table~\ref{tab:future_scope}.
+
+\begin{table}[htbp]
+\centering
+\caption{System Limitations and Future Enhancements}
+\label{tab:future_scope}
+\renewcommand{\arraystretch}{1.5}
+\begin{tabularx}{\textwidth}{@{} l X X @{}}
+\toprule
+\textbf{Domain} & \textbf{Current Limitation} & \textbf{Proposed Enhancement} \\
+\midrule
+\textbf{Data Ingestion} & Heavily reliant on hardcoded regular expressions to parse IIITA's specific Excel format. & Implementation of a dynamic mapping UI allowing users to visually map Excel columns to DB fields. \\
+\textbf{Solver Performance} & Single-threaded (1+1)-ES running on the browser's main thread via batched \texttt{setTimeout}. Sufficient for current problem sizes but may become a bottleneck for larger institutions. & Migration to Web Workers for parallel solver execution, or a server-side solver for larger problem instances. Exploration of hybrid meta-heuristics (e.g., memetic algorithms combining ES with local search). \\
+\textbf{Solver Optimality} & The Evolution Strategy is a meta-heuristic; solutions are feasible but not guaranteed to be globally optimal with respect to soft constraints. & Investigation of multi-objective optimization (Pareto-optimal fronts) and hybridization with constraint programming (CP) solvers for provable optimality on subproblems. \\
+\textbf{State Management} & Relies on localized React state and custom hooks, potentially causing prop-drilling in deep components. & Adoption of a global state manager (e.g., Zustand or Redux) to optimize data sharing across views. \\
+\textbf{Notifications} & Users must actively check the web portal for schedule updates. & Development of a Progressive Web App (PWA) with Push Notifications via Firebase Cloud Messaging. \\
+\textbf{Analytics} & Basic occupancy visualization without long-term historical analysis. & Dedicated BI Dashboard to track room utilization metrics across multiple academic years. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+%-----------------------------------
+\section{Concluding Remarks}
+
+In conclusion, the IIITA Timetabling System successfully modernizes a critical institutional workflow. By combining heuristic data extraction with a robust relational database, a (1+1) Evolution Strategy solver, an interactive drag-and-drop editor with LNS-based auto-fix, and a lightning-fast React frontend, the system provides unparalleled visibility, automation, and integrity to academic scheduling. The system demonstrates that a browser-based, pure-TypeScript solver can reliably generate feasible, high-quality timetables for a real-world university setting, while the interactive editor empowers administrators to refine solutions with full constraint awareness. It stands as a testament to the power of modern web technologies and evolutionary computation in solving complex, real-world logistical challenges.

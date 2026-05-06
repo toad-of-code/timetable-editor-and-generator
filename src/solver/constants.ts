@@ -44,6 +44,9 @@ export const SLOT_END_TIMES = [
  */
 export const BREAK_AFTER_SLOTS = [2, 4]; // break after slot 2, lunch after slot 4
 
+/** Lunch falls after this slot. Morning = slots 1..LUNCH_AFTER_SLOT, Afternoon = slots (LUNCH_AFTER_SLOT+1)..SLOTS_PER_DAY */
+export const LUNCH_AFTER_SLOT = 4;
+
 // ─── Session Durations (in 1-hour slots) ───────────────────────────────────────
 
 /** 1-hour lecture = 1 slot */
@@ -91,6 +94,7 @@ export const DEFAULT_SOLVER_CONFIG: SolverConfig = {
     roomUtilizationThreshold: 0.60,   // 60% — rooms below this fill ratio are penalized
     roomOverutilizationThreshold: 1.20, // 120% — rooms above this fill ratio are penalized
     hardPenalty: 1000,
+    professorSameHalfWeight: 5.0,
     adaptationWindow: 50,
     sigmaIncrease: 1.22,
     sigmaDecrease: 0.82,

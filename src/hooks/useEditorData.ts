@@ -145,7 +145,7 @@ export function useEditorData(initialTimetableId?: string): EditorData {
             start_time,
             end_time,
             slot_type,
-            subject:subject_id (code, name, subject_type),
+            subject:subject_id (code, name, subject_type, elective_group),
             professor:professor_id (name),
             room:room_id (name),
             student_group:student_group_id (name)
@@ -173,6 +173,7 @@ export function useEditorData(initialTimetableId?: string): EditorData {
                     subject_code: row.subject?.code ?? '??',
                     subject_name: row.subject?.name ?? 'Unknown',
                     subject_type: row.subject?.subject_type ?? 'Core',
+                    basket_name: row.subject?.elective_group ?? null,
                     professor_name: row.professor?.name ?? 'TBD',
                     room_name: row.room?.name ?? '—',
                     group_name: row.student_group?.name ?? '??',

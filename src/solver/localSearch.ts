@@ -18,6 +18,7 @@ export interface EditorSlot {
     end_time: string;           // "09:50"
     slot_type: 'Lecture' | 'Tutorial' | 'Practical';
     subject_type: string;        // 'Core' | 'Elective' | 'Minor'
+    basket_name: string | null;  // Elective basket (e.g., 'HSMC', 'MDM', 'lang'). Null for core subjects.
     // Joined display names
     subject_code: string;
     subject_name: string;

@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import type { Group, Room } from '../../hooks/useGeneratorData';
 
 interface Props {
@@ -5,6 +6,45 @@ interface Props {
     rooms: Room[];
     homeRooms: Record<string, string>;
     onChange: (groupId: string, roomId: string) => void;
+}
+
+function CascadingRoomSelect({ group, rooms, value, onChange }: { group: Group, rooms: Room[], value: string, onChange: (val: string) => void }) {
+    const selectedRoom = rooms.find(r => r.id === value);
+    const [type, setType] = useState<string>(selectedRoom ? selectedRoom.room_type : 'Lecture');
+    
+    useEffect(() => {
+        if (selectedRoom && selectedRoom.room_type !== type) {
+            setType(selectedRoom.room_type);
+        }
+    }, [selectedRoom, type]);
+
+    const filteredRooms = rooms.filter(r => r.room_type === type);
+
+    return (
+        <div className="flex flex-1 gap-1">
+            <select
+                className="w-[40%] px-2 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                value={type}
+                onChange={e => {
+                    setType(e.target.value);
+                    onChange('');
+                }}
+            >
+                <option value="Lecture">Lecture</option>
+                <option value="Lab">Lab</option>
+            </select>
+            <select
+                className={`w-[60%] px-2 py-1.5 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${value ? 'border-green-400 bg-green-50' : 'border-gray-300 bg-white'}`}
+                value={value}
+                onChange={e => onChange(e.target.value)}
+            >
+                <option value="">— Room —</option>
+                {filteredRooms.map(r => (
+                    <option key={r.id} value={r.id}>{r.name}</option>
+                ))}
+            </select>
+        </div>
+    );
 }
 
 export function HomeRoomMapper({ roomableGroups, rooms, homeRooms, onChange }: Props) {
@@ -22,30 +62,21 @@ export function HomeRoomMapper({ roomableGroups, rooms, homeRooms, onChange }: P
                     No assignable sections found (only 'WMC' group exists).
                 </p>
             ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                     {roomableGroups.map(group => (
                         <div
                             key={group.id}
                             className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg"
                         >
-                            <span className="text-sm font-semibold text-gray-700 min-w-[60px]">
+                            <span className="text-sm font-semibold text-gray-700 min-w-[50px]">
                                 {group.name}
                             </span>
-                            <select
-                                className={`flex-1 px-2 py-1.5 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${homeRooms[group.id]
-                                    ? 'border-green-400 bg-green-50'
-                                    : 'border-gray-300'
-                                    }`}
+                            <CascadingRoomSelect
+                                group={group}
+                                rooms={rooms}
                                 value={homeRooms[group.id] ?? ''}
-                                onChange={e => onChange(group.id, e.target.value)}
-                            >
-                                <option value="">— Room —</option>
-                                {rooms.map(r => (
-                                    <option key={r.id} value={r.id}>
-                                        {r.name} ({r.room_type})
-                                    </option>
-                                ))}
-                            </select>
+                                onChange={(val) => onChange(group.id, val)}
+                            />
                         </div>
                     ))}
                 </div>

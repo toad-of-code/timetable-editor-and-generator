@@ -84,6 +84,8 @@ export interface SolverConfig {
   roomOverutilizationThreshold: number;
   /** Hard-constraint penalty multiplier */
   hardPenalty: number;
+  /** Weight for the professor same-half soft penalty */
+  professorSameHalfWeight: number;
   /** How many generations to average for the 1/5th rule */
   adaptationWindow: number;
   /** Factor to increase σ when success rate > 1/5 */
@@ -104,6 +106,8 @@ export interface FitnessResult {
   gapPenalty: number;
   /** Soft penalty (room under-utilization cost) */
   roomUtilizationPenalty: number;
+  /** Soft penalty (professor teaches in both halves of the day) */
+  professorSameHalfPenalty: number;
   /** Breakdown of violations by constraint type (only on best results) */
   violationBreakdown?: {
     timeBoundary: number;

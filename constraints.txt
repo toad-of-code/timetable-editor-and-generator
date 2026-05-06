@@ -116,6 +116,17 @@ Fitness = (Hard Violations × Hard Penalty) + (Gap Penalty × Gap Weight) + (Roo
                roomOverutilizationThreshold = 1.20 (120% maximum fill)
      Note:     Locked sessions (from published timetables) are exempt.
 
+  3. PROFESSOR SAME-HALF PENALTY
+     Function: computeProfessorSameHalfPenalty()
+     Rule:     For each professor on each day, the solver checks whether they
+               have classes in BOTH the morning half (slots 1–4, up to 13:00)
+               and the afternoon half (slots 5–8, from 14:30). If they do,
+               a penalty of 1 is added for that (professor, day) pair.
+               The solver tries to keep each professors daily sessions confined
+               to a single half of the day.
+     Config:   professorSameHalfWeight = 5.0
+     Note:     Locked sessions are excluded from this check.
+
 
 ───────────────────────────────────────────────────────────────────
                       TIME MODEL (1-HOUR SLOTS)
@@ -164,3 +175,6 @@ same half not teacher-soft cons
 finl yera lec 9-11 and 4;30 -6:30
 
 shailendra 
+
+ek prof multiple class
+can be shared

@@ -32,9 +32,10 @@ export function FreeRoomViewer({ onBack }: FreeRoomViewerProps) {
   // --- State ---
   const [loading, setLoading] = useState(true);
   const [busySlots, setBusySlots] = useState<FetchedSlot[]>([]);
-  const [allRooms, setAllRooms] = useState<string[]>([]);
+  const [allRooms, setAllRooms] = useState<{name: string; room_type: string}[]>([]);
   const [availableBuildings, setAvailableBuildings] = useState<string[]>([]);
   const [selectedBuilding, setSelectedBuilding] = useState<string>('All');
+  const [selectedRoomType, setSelectedRoomType] = useState<string>('All');
 
   const pdfRef = useRef<HTMLDivElement>(null);
 
@@ -54,10 +55,10 @@ export function FreeRoomViewer({ onBack }: FreeRoomViewerProps) {
     setLoading(true);
     try {
       // Always fetch ALL rooms from the master rooms table
-      const { data: roomData } = await supabase.from('rooms').select('name').order('name');
-      const roomNames = (roomData || []).map((r: { name: string }) => r.name);
-      setAllRooms(roomNames);
-      const buildings = Array.from(new Set(roomNames.map(r => getBuildingName(r)))).sort();
+      const { data: roomData } = await supabase.from('rooms').select('name, room_type').order('name');
+      const rooms = (roomData || []).map((r: { name: string, room_type: string }) => ({ name: r.name, room_type: r.room_type }));
+      setAllRooms(rooms);
+      const buildings = Array.from(new Set(rooms.map(r => getBuildingName(r.name)))).sort();
       setAvailableBuildings(buildings);
 
       // Then fetch busy slots from published timetables (if any)
@@ -115,10 +116,11 @@ export function FreeRoomViewer({ onBack }: FreeRoomViewerProps) {
     );
 
     return allRooms.filter(room => {
-      if (busyRooms.has(room)) return false;
-      if (selectedBuilding !== 'All' && getBuildingName(room) !== selectedBuilding) return false;
+      if (busyRooms.has(room.name)) return false;
+      if (selectedBuilding !== 'All' && getBuildingName(room.name) !== selectedBuilding) return false;
+      if (selectedRoomType !== 'All' && room.room_type !== selectedRoomType) return false;
       return true;
-    });
+    }).map(r => r.name);
   };
 
   // --- 4. Render Cell ---
@@ -196,6 +198,14 @@ export function FreeRoomViewer({ onBack }: FreeRoomViewerProps) {
             <select value={selectedBuilding} onChange={(e) => setSelectedBuilding(e.target.value)} className="text-xs font-semibold text-gray-700 bg-transparent outline-none cursor-pointer">
               <option value="All">All Buildings</option>
               {availableBuildings.map(b => <option key={b} value={b}>{b}</option>)}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-300 rounded hover:border-indigo-400 transition-colors">
+            <select value={selectedRoomType} onChange={(e) => setSelectedRoomType(e.target.value)} className="text-xs font-semibold text-gray-700 bg-transparent outline-none cursor-pointer">
+              <option value="All">All Types</option>
+              <option value="Lecture">Lecture Rooms</option>
+              <option value="Lab">Labs</option>
             </select>
           </div>
 

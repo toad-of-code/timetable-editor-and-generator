@@ -1,0 +1,263 @@
+\frontmatter% Use roman page numbering style (i, ii, iii, iv...) for the pre-content pages
+
+\pagestyle{plain} % Default to the plain heading style until the thesis style is called for the body content
+%----------------------------------------------------------------------------------------
+%	TITLE PAGE
+%----------------------------------------------------------------------------------------
+
+\begin{titlepage}
+\begin{center}
+\begin{spacing}{1.2}
+
+{\huge \bfseries \ttitle\par}  % ← Uses thesis title from main.tex
+
+\vspace {5mm}
+\textit{A thesis submitted in partial fulfillment of the requirements\\for the award of the degree of} 
+
+\vspace{7mm}
+\textsc{\huge \MakeUppercase{\degreename}}  % ← Uses degree from main.tex
+
+\vspace {3mm}
+% Logo display - no figure environment needed on title page
+\includegraphics[width=5cm]{Figures/IIITA_Logo.jpg}
+\vspace{5mm}
+% ************************************
+\begin{minipage}[t]{0.5\textwidth}
+    \begin{flushleft} \large
+        \textit{By:-} \\%[2mm]
+            \textsc{\studentnamesformatted} % ← Uses student names from main.tex
+    \end{flushleft}
+\end{minipage}
+\begin{minipage}[t]{0.45\textwidth}
+    \begin{flushright} \large
+        \textit{Enrollment No.} \\
+            \textsc{\rollnumbersformatted} % ← Uses roll numbers from main.tex
+    \end{flushright}
+\end{minipage}\\[1cm]
+% *************************************
+
+\textit{Under the Supervision of}\\[2mm]
+\textsc{\Large \supname}\\% ← Uses supervisor name from main.tex
+\vspace{7mm}
+\textit{to the}\\[2mm]
+\textsc{\Large \deptname}\\ % ← Uses department from main.tex
+
+\vspace{8mm}
+% Hindi text commented out for pdfLaTeX compatibility
+% \begin{hindi}
+%     \textsc{\Large {भारतीय सूचना प्रौद्योगिकी संस्थान, इलाहाबाद}} \\
+% \end{hindi}
+% \vspace{3mm}
+\textsc{\Large \univname} % ← Uses university from main.tex
+
+\vspace{5mm}
+07/05/2026
+
+
+\end{spacing}
+\end{center}
+\end{titlepage}
+
+
+%----------------------------------------------------------------------------------------
+%	CERTIFICATE
+%----------------------------------------------------------------------------------------
+\checktoopen
+\begin{figure}[htp]
+    % \centering
+    \includegraphics[height=3cm,keepaspectratio]{Figures/IIITA_Header.png}
+\end{figure}
+% \string\setblankpagestyle \space
+\thispagestyle{empty}
+\vspace*{.06\textheight}
+
+\begin{spacing}{1.5}
+\begin{center}
+    {\centering\large\bfseries CERTIFICATE \par\vspace{10pt}}
+\end{center}
+
+\noindent It is certified that the work contained in the thesis titled \enquote{\ttitle} by {\studentnamescomma} has been carried out under my supervision and that this work has not been submitted elsewhere for a degree.
+% ↑ Uses title and student names from main.tex
+
+\vspace{3.5cm}
+\hfill\begin{minipage}{7.5cm}   %{0.52\linewidth}
+    \begin{spacing}{1.2}
+        \par
+        \rule{\textwidth}{0.2pt}\\
+        {\supname} \par  % ← Uses supervisor name from main.tex
+        {\deptname}  \par  % ← Uses department from main.tex
+        IIIT Allahabad \par
+    \end{spacing}
+\end{minipage}
+
+\end{spacing}
+% \end{certificate}
+\cleardoublepage
+
+%----------------------------------------------------------------------------------------
+%	DECLARATION
+%----------------------------------------------------------------------------------------
+\checktoopen
+\begin{figure}[htp]
+    % \centering
+    \includegraphics[height=3cm,keepaspectratio]{Figures/IIITA_Header.png}
+\end{figure}
+% \string\setblankpagestyle \space
+\thispagestyle{empty}
+\vspace{1mm}
+
+\begin{center}
+    {\large\bfseries CANDIDATE DECLARATION}
+\end{center}
+
+\begin{spacing}{1.2}
+
+\noindent \pronounwe, \studentnamesdeclaration, hereby certify that the thesis titled \enquote{\ttitle} has been submitted by \pronounour{} in partial fulfillment of the requirements for the Degree of \degreename{} in the \deptname{} at the \univname.
+% ↑ Uses pronouns and names from main.tex - automatically adjusts for single/multiple students
+
+\par
+\noindent We acknowledge that plagiarism includes: 
+\begin{enumerate} 
+    \item Reproducing another person's work (fully or partially) or ideas and presenting them as our own.
+    \item Copying or paraphrasing another person's work without appropriate attribution.
+    \item Engaging in literary theft by reproducing a unique literary construct without crediting its source.
+\end{enumerate}
+\par
+We affirm that due credit has been given to all original authors and sources through proper citations for words, ideas, diagrams, graphics, computer programs, experiments, results, and websites that are not our own contributions. Direct quotations have been appropriately marked, and sources have been properly referenced. Furthermore, we declare that no portion of our work is plagiarized. In the event of a plagiarism claim, we accept full responsibility for the contents of this thesis. We acknowledge that our supervisor may not be able to verify the originality of every aspect of our work.
+\end{spacing}
+
+\begin{spacing}{2.0}
+% \vspace{1cm}
+\noindent
+\begin{minipage}[t]{0.4\textwidth}  
+    \begin{flushleft} 
+        Place: \textbf{IIITA}\\
+    \end{flushleft}
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.4\textwidth}
+    \begin{flushright}         
+        Date: \textbf{07/05/2026}\\       
+    \end{flushright}
+\end{minipage}
+% \rule{\textwidth}{0.1pt}\\
+\par
+{\studentsignatures} % ← Uses student names and rolls from main.tex
+\end{spacing}
+
+
+        
+\cleardoublepage
+
+
+
+%----------------------------------------------------------------------------------------
+%	QUOTATION PAGE
+%----------------------------------------------------------------------------------------
+
+% \vspace*{0.2\textheight}
+% \begin{spacing}{1.5}
+% \noindent\enquote{\itshape Thanks to my solid academic training, today I can write hundreds of words on virtually any topic without possessing a shred of information, which is how I also got a good job in industry.}\bigbreak
+
+% \hfill {\firstauthorname}
+% \end{spacing}
+% \cleardoublepage
+
+
+%----------------------------------------------------------------------------------------
+%	ABSTRACT PAGE
+%----------------------------------------------------------------------------------------
+
+\begin{abstract}
+\begin{spacing}{2}
+
+\addchaptertocentry{\abstractname} % Add the abstract to the table of contents
+
+University timetabling is a highly complex, NP-hard constraint satisfaction problem that significantly impacts academic operations and resource utilization. In modern educational institutions, managing course schedules, professor assignments, room allocations, and student groups requires a robust, dynamic, and integrated system. This thesis presents the design, architecture, and implementation of the ``IIITA Timetabling System,'' a comprehensive platform developed specifically to address these challenges at the Indian Institute of Information Technology, Allahabad.
+
+The proposed system digitizes the entire timetable lifecycle. It introduces a heuristic-driven Excel parsing engine capable of ingesting raw, unstructured timetable spreadsheets, extracting critical metadata (such as Subject Codes, Faculty Names, and Room Numbers), and automatically resolving cell merges and varying time formats. This data is securely stored and synchronized with a cloud-based PostgreSQL backend powered by Supabase.
+
+A central contribution of this thesis is the implementation of an automated timetable generator powered by a (1+1) Evolution Strategy (ES) algorithm. The solver models each timetable as a chromosome of Gene decisions (day, time-slot, room) and evaluates candidate schedules against a fitness function comprising ten hard constraints (room non-overlap, professor non-overlap, student group non-overlap, break/lunch boundary enforcement, lab-room assignment, elective basket synchronization, WMC-section isolation, home-room binding, the 2+1 lecture format, and time boundary compliance) and three soft constraints (student schedule gaps, room utilization efficiency, and professor same-half-day avoidance). The algorithm employs Rechenberg's 1/5th success rule for step-size ($\sigma$) adaptation, a stagnation restart mechanism, and supports warm-starting from existing seed timetables. Cross-semester constraint awareness is achieved through locked sessions from published timetables.
+
+To complement the automated solver, the system provides an interactive drag-and-drop Timetable Editor. This component enables administrators to manually adjust solver-generated schedules, visualize conflicts in real time with colour-coded highlights, and invoke a Large Neighbourhood Search (LNS) auto-fix routine that targets clashing sessions. The editor features a Master View that aggregates all published timetable slots across semesters, enabling cross-timetable conflict detection.
+
+To serve various stakeholders, the system provides role-specific, dynamic viewing interfaces. Students benefit from a personalized ``My Timetable'' view with conflict resolution and intelligent merging of lecture and practical sessions. Faculty members receive dedicated schedules, while administrators can access a campus-wide ``Master Occupancy'' grid and a ``Free Room Finder'' utility. The system also includes an advanced clash detection algorithm that identifies room overlaps, professor scheduling conflicts, and section-level clashes in real time.
+
+Built using React 19, TypeScript, and Tailwind CSS, the application offers a responsive, modern user experience. It features robust integration with the Google Sheets API for professional formatted data export, alongside localized PDF generation capabilities. This thesis details the theoretical foundation of the timetabling problem, the modern technology stack, the modular software architecture, the evolutionary algorithm and its constraint system, and the interactive editing tools implemented to achieve a scalable, real-time campus timetabling solution.
+
+\end{spacing}
+\end{abstract}
+
+%----------------------------------------------------------------------------------------
+%	ACKNOWLEDGEMENTS
+%----------------------------------------------------------------------------------------
+
+\begin{acknowledgements}
+\addchaptertocentry{\acknowledgementname} % Add the acknowledgements to the table of contents
+
+\vspace{1cm}
+We would like to express our sincere gratitude to our supervisor, \supname, for his continuous support, guidance, and encouragement throughout this research and development process. His insightful comments and technical suggestions have been invaluable in shaping this work.
+
+We are also grateful to the faculty members of the \deptname\ for their support during our studies. Special thanks to our colleagues and friends who provided a stimulating environment for learning and development.
+
+Finally, we would like to thank our families for their unconditional love, support, and patience throughout our academic journey.
+
+\end{acknowledgements}
+
+%----------------------------------------------------------------------------------------
+%	LIST OF CONTENTS/FIGURES/TABLES PAGES
+%----------------------------------------------------------------------------------------
+
+\tableofcontents % Prints the main table of contents
+
+\listoffigures % Prints the list of figures
+
+
+\listoftables % Prints the list of tables
+
+
+%----------------------------------------------------------------------------------------
+%	ABBREVIATIONS
+%----------------------------------------------------------------------------------------
+
+%\begin{abbreviations}{ll} % Include a list of abbreviations (a table of two columns)
+%
+%\textbf{LAH} & \textbf{L}ist \textbf{A}bbreviations \textbf{H}ere\\
+%\textbf{WSF} & \textbf{W}hat (it) \textbf{S}tands \textbf{F}or\\
+%
+%\end{abbreviations}
+
+%----------------------------------------------------------------------------------------
+%	PHYSICAL CONSTANTS/OTHER DEFINITIONS
+%----------------------------------------------------------------------------------------
+
+%\begin{constants}{lr@{${}={}$}l} % The list of physical constants is a three column table
+%
+% % The \SI{}{} command is provided by the siunitx package, see its documentation for instructions on how to use it
+%
+% Speed of Light & $c_{0}$ & \SI{2.99792458e8}{\meter\per\second} (exact)\\
+% Constant Name & $Symbol$ & $Constant Value$ with units\\
+%
+%\end{constants}
+
+%----------------------------------------------------------------------------------------
+%	SYMBOLS
+%----------------------------------------------------------------------------------------
+
+%\begin{symbols}{lll} % Include a list of Symbols (a three column table)
+%
+%$a$ & distance & \si{\meter} \\
+%$P$ & power & \si{\watt} (\si{\joule\per\second}) \\
+% %Symbol & Name & Unit \\
+%
+%\addlinespace % Gap to separate the Roman symbols from the Greek
+%
+%$\omega$ & angular frequency & \si{\radian} \\
+%
+%\end{symbols}
+
+%----------------------------------------------------------------------------------------
+%	DEDICATION
+%----------------------------------------------------------------------------------------
+
+%\dedicatory{For/Dedicated to/To my\ldots}

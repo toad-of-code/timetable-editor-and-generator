@@ -340,6 +340,7 @@ export function generateSolverLog(
     lines.push(`│  Hard violations    : ${fitness.hardViolations}`);
     lines.push(`│  Gap penalty (soft) : ${fitness.gapPenalty}`);
     lines.push(`│  Room util penalty  : ${fitness.roomUtilizationPenalty}`);
+    lines.push(`│  Prof same-half     : ${fitness.professorSameHalfPenalty}`);
     lines.push(`│  FEASIBLE           : ${fitness.hardViolations === 0 ? 'YES' : 'NO'}`);
     lines.push('│');
     if (fitness.violationBreakdown) {
@@ -611,6 +612,7 @@ export function generateEditorLog(input: EditorLogInput): string {
     lines.push(`│  Hard violations    : ${fitness.hardViolations}`);
     lines.push(`│  Gap penalty (soft) : ${fitness.gapPenalty}`);
     lines.push(`│  Room util penalty  : ${fitness.roomUtilizationPenalty}`);
+    lines.push(`│  Prof same-half     : ${fitness.professorSameHalfPenalty}`);
     lines.push(`│  FEASIBLE           : ${fitness.hardViolations === 0 ? 'YES' : 'NO'}`);
     lines.push('│');
     if (fitness.violationBreakdown) {

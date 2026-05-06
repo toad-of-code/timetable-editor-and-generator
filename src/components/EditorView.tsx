@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import {
     Loader2, Save, CheckCircle2, AlertTriangle, GripVertical,
-    Undo2, Send, Pencil, Calendar, Filter, Wand2,
+    Undo2, Send, Pencil, Calendar, Filter, Wand2, Eye, EyeOff,
 } from 'lucide-react';
 import { useEditorData } from '../hooks/useEditorData';
 import {
@@ -19,6 +19,21 @@ import toast from 'react-hot-toast';
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
 const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI'] as const;
+
+/** A slot from a published timetable — displayed in master view as read-only context. */
+interface MasterSlot {
+    id: string;
+    timetable_name: string;
+    semester: number;
+    day_of_week: number;
+    start_time: string;
+    end_time: string;
+    slot_type: string;
+    subject_code: string;
+    professor_name: string;
+    room_name: string;
+    group_name: string;
+}
 
 interface TimeColumn {
     label: string;
@@ -143,7 +158,7 @@ function buildSessionsFromSlots(
             duration, slotType: s.slot_type as 'Lecture' | 'Tutorial' | 'Practical',
             homeRoomIndex: s.room_id ? (roomIdToIndex.get(s.room_id) ?? 0) : 0,
             isElective, electiveSlotIndex: isElective ? 0 : -1,
-            basketName: null,
+            basketName: s.basket_name ?? null,
             isWMCGroup: s.group_name === 'WMC' || /IT[\s-]*BI/i.test(s.group_name ?? ''),
             lecturePairIndex,
             studentCount: 100,
@@ -158,11 +173,51 @@ function buildEditorSolverConfig() {
     return {
         maxGenerations: 0, reportInterval: 0, initialSigma: 2, gapWeight: 1,
         roomUtilizationWeight: 0.8, roomUtilizationThreshold: 0.60, roomOverutilizationThreshold: 1.20,
-        hardPenalty: 1000, adaptationWindow: 50, sigmaIncrease: 1.22, sigmaDecrease: 0.82,
+        hardPenalty: 1000, professorSameHalfWeight: 5.0, adaptationWindow: 50, sigmaIncrease: 1.22, sigmaDecrease: 0.82,
     };
 }
 
 // ─── Main Component ────────────────────────────────────────────────────────────
+
+function InlineCascadingRoomSelect({ slot, rooms, onChange }: { slot: { room_id: string | null; slot_type: string }, rooms: { id: string; name: string; room_type: string }[], onChange: (roomId: string) => void }) {
+    const selectedRoom = rooms.find(r => r.id === slot.room_id);
+    const defaultType = slot.slot_type === 'Practical' ? 'Lab' : 'Lecture';
+    const [type, setType] = useState<string>(selectedRoom ? selectedRoom.room_type : defaultType);
+
+    useEffect(() => {
+        if (selectedRoom && selectedRoom.room_type !== type) {
+            setType(selectedRoom.room_type);
+        }
+    }, [selectedRoom, type]);
+
+    const filteredRooms = rooms.filter(r => r.room_type === type);
+
+    return (
+        <div className="flex gap-1 w-full">
+            <select
+                className="w-2/5 text-[10px] px-1 py-0.5 rounded border border-gray-200 bg-white"
+                value={type}
+                onChange={e => {
+                    setType(e.target.value);
+                    onChange('');
+                }}
+            >
+                <option value="Lecture">Lecture</option>
+                <option value="Lab">Lab</option>
+            </select>
+            <select
+                className="w-3/5 text-[10px] px-1 py-0.5 rounded border border-gray-200 bg-white"
+                value={slot.room_id ?? ''}
+                onChange={e => onChange(e.target.value)}
+            >
+                <option value="">— Room —</option>
+                {filteredRooms.map(r => (
+                    <option key={r.id} value={r.id}>{r.name}</option>
+                ))}
+            </select>
+        </div>
+    );
+}
 
 export function EditorView({ initialTimetableId, onBack }: EditorViewProps) {
     const {
@@ -188,6 +243,63 @@ export function EditorView({ initialTimetableId, onBack }: EditorViewProps) {
 
     // ── LNS state ──
     const [isLnsRunning, setIsLnsRunning] = useState(false);
+
+    // ── Master View state ──
+    const [showMasterView, setShowMasterView] = useState(false);
+    const [masterSlots, setMasterSlots] = useState<MasterSlot[]>([]);
+    const [loadingMaster, setLoadingMaster] = useState(false);
+    const [masterProfFilter, setMasterProfFilter] = useState<string>('All');
+
+    // Fetch all published TT slots when master view is toggled ON
+    const loadMasterSlots = useCallback(async () => {
+        setLoadingMaster(true);
+        try {
+            const pubTTs = timetables.filter(t => t.status === 'published' && t.id !== selectedTimetableId);
+            if (pubTTs.length === 0) { setMasterSlots([]); return; }
+            const pubIds = pubTTs.map(t => t.id);
+            const ttNameMap = new Map(pubTTs.map(t => [t.id, { name: t.name, semester: t.semester }]));
+
+            const { data } = await supabase
+                .from('timetable_slots')
+                .select(`
+                    id, timetable_id, day_of_week, start_time, end_time, slot_type,
+                    subject:subject_id (code),
+                    professor:professor_id (name),
+                    room:room_id (name),
+                    student_group:student_group_id (name)
+                `)
+                .in('timetable_id', pubIds);
+
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const mapped: MasterSlot[] = (data ?? []).map((r: any) => {
+                const ttInfo = ttNameMap.get(r.timetable_id);
+                return {
+                    id: r.id,
+                    timetable_name: ttInfo?.name ?? 'Unknown',
+                    semester: ttInfo?.semester ?? 0,
+                    day_of_week: r.day_of_week,
+                    start_time: r.start_time,
+                    end_time: r.end_time,
+                    slot_type: r.slot_type,
+                    subject_code: r.subject?.code ?? '??',
+                    professor_name: r.professor?.name ?? 'TBD',
+                    room_name: r.room?.name ?? '—',
+                    group_name: r.student_group?.name ?? '??',
+                };
+            });
+            setMasterSlots(mapped);
+        } catch (err) {
+            console.error('Failed to load master slots', err);
+        } finally {
+            setLoadingMaster(false);
+        }
+    }, [timetables, selectedTimetableId]);
+
+    const handleToggleMasterView = useCallback(() => {
+        const next = !showMasterView;
+        setShowMasterView(next);
+        if (next) loadMasterSlots();
+    }, [showMasterView, loadMasterSlots]);
 
     // ── Drag state ──
     const dragSlotId = useRef<string | null>(null);
@@ -319,6 +431,12 @@ export function EditorView({ initialTimetableId, onBack }: EditorViewProps) {
                     if (!bothElectives) {
                         ids.add(a.id); ids.add(b.id);
                     }
+                }
+
+                // Cross-basket clash: two electives from DIFFERENT baskets at the same time
+                // (same-basket overlap is intentional — students pick one)
+                if (bothElectives && a.basket_name && b.basket_name && a.basket_name !== b.basket_name) {
+                    ids.add(a.id); ids.add(b.id);
                 }
             }
         }
@@ -631,13 +749,11 @@ export function EditorView({ initialTimetableId, onBack }: EditorViewProps) {
                     >
                         <div>
                             <label className="text-[8px] uppercase font-bold text-gray-400 block">Room</label>
-                            <select
-                                value={slot.room_id ?? ''}
-                                onChange={(e) => handleRoomChange(slot.id, e.target.value)}
-                                className="w-full text-[10px] px-1 py-0.5 rounded border border-gray-200 bg-white"
-                            >
-                                {rooms.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-                            </select>
+                            <InlineCascadingRoomSelect
+                                slot={slot}
+                                rooms={rooms}
+                                onChange={(val) => handleRoomChange(slot.id, val)}
+                            />
                         </div>
                         <div>
                             <label className="text-[8px] uppercase font-bold text-gray-400 block">Professor</label>
@@ -672,12 +788,48 @@ export function EditorView({ initialTimetableId, onBack }: EditorViewProps) {
         );
     };
 
+    // ── Render a published (locked) slot item in master view ──
+
+    const renderMasterSlotItem = (ms: MasterSlot) => {
+        const isLab = ms.slot_type === 'Practical';
+        const isTutorial = ms.slot_type === 'Tutorial';
+        const textColor = isLab ? 'text-orange-400' : isTutorial ? 'text-green-600' : 'text-gray-500';
+
+        // Semester-based color band
+        const semColors: Record<number, string> = {
+            2: 'border-l-blue-400', 4: 'border-l-emerald-400', 6: 'border-l-amber-400', 8: 'border-l-rose-400',
+            1: 'border-l-cyan-400', 3: 'border-l-violet-400', 5: 'border-l-pink-400', 7: 'border-l-lime-400',
+        };
+        const semBorder = semColors[ms.semester] ?? 'border-l-gray-300';
+
+        return (
+            <div
+                key={`pub-${ms.id}`}
+                className={`w-full flex flex-col justify-center items-center text-[8px] leading-tight
+                    border-b last:border-0 p-0.5 ${textColor} bg-gray-50 opacity-70
+                    border-l-[3px] ${semBorder} select-none`}
+                title={`${ms.timetable_name} (Sem ${ms.semester})`}
+            >
+                <div className="font-semibold whitespace-nowrap">
+                    {ms.subject_code} ({ms.slot_type.charAt(0)})
+                </div>
+                <div className="text-[7px] opacity-80 whitespace-nowrap">
+                    {ms.professor_name} · {ms.room_name}
+                </div>
+                <div className="text-[7px] italic text-gray-400 whitespace-nowrap">
+                    {ms.group_name} · S{ms.semester}
+                </div>
+            </div>
+        );
+    };
+
     // ── Render cell (TimetableViewer style) ──
 
     const renderCellContent = (dayIndex: number, column: TimeColumn) => {
         const colStart = parseInt(column.start.replace(':', ''));
         const colEnd = parseInt(column.end.replace(':', ''));
 
+        // Current TT slots
         let cellSlots = processedSlots.filter(s => {
             if (s.day_of_week !== dayIndex + 1) return false;
             const sStart = parseInt(s.start_time.slice(0, 5).replace(':', ''));
@@ -691,13 +843,31 @@ export function EditorView({ initialTimetableId, onBack }: EditorViewProps) {
             );
         }
 
-        if (cellSlots.length === 0) return null;
-        const isCrowded = cellSlots.length > 4;
+        // Master view: also include published slots
+        let pubCellSlots: MasterSlot[] = [];
+        if (showMasterView) {
+            pubCellSlots = masterSlots.filter(ms => {
+                if (ms.day_of_week !== dayIndex + 1) return false;
+                const msStart = parseInt(ms.start_time.slice(0, 5).replace(':', ''));
+                const msEnd = parseInt(ms.end_time.slice(0, 5).replace(':', ''));
+                return msStart <= colStart && msEnd >= colEnd;
+            });
+            // Apply professor filter
+            if (masterProfFilter !== 'All') {
+                cellSlots = cellSlots.filter(s => s.professor_name === masterProfFilter);
+                pubCellSlots = pubCellSlots.filter(ms => ms.professor_name === masterProfFilter);
+            }
+        }
+
+        const totalCount = cellSlots.length + pubCellSlots.length;
+        if (totalCount === 0) return null;
+        const isCrowded = totalCount > 4;
 
         return (
             <div className="h-full flex flex-col justify-start overflow-y-auto custom-scrollbar">
                 <div className={isCrowded ? "grid grid-cols-2 gap-1" : "flex flex-col gap-1"}>
                     {cellSlots.map(slot => renderSlotItem(slot))}
+                    {pubCellSlots.map(ms => renderMasterSlotItem(ms))}
                 </div>
             </div>
         );
@@ -912,12 +1082,44 @@ export function EditorView({ initialTimetableId, onBack }: EditorViewProps) {
                                 : <><Send className="w-3.5 h-3.5" /> Publish</>}
                     </button>
 
+                    <div className="h-5 w-px bg-gray-300 mx-0.5"></div>
+
+                    {/* Campus View toggle */}
+                    <button
+                        onClick={handleToggleMasterView}
+                        disabled={loadingMaster}
+                        className={`flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded transition shadow-sm border
+                            ${showMasterView
+                                ? 'bg-violet-600 text-white border-violet-700 hover:bg-violet-700'
+                                : 'bg-white text-violet-700 border-violet-200 hover:bg-violet-50'}`}
+                    >
+                        {loadingMaster
+                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            : showMasterView ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        {showMasterView ? 'Exit Campus' : 'Campus View'}
+                    </button>
+
+                    {/* Professor filter (visible in master view) */}
+                    {showMasterView && (
+                        <select
+                            value={masterProfFilter}
+                            onChange={(e) => setMasterProfFilter(e.target.value)}
+                            className="text-xs px-2 py-1.5 border border-gray-200 rounded bg-white text-gray-700 outline-none"
+                        >
+                            <option value="All">All Professors</option>
+                            {professors.map(p => (
+                                <option key={p.id} value={p.name}>{p.name}</option>
+                            ))}
+                        </select>
+                    )}
+
                     {/* Back to list */}
                     <button
                         onClick={() => {
                             setSelectedTimetableId('');
                             setUndoStack([]);
                             setFeasibility(null);
+                            setShowMasterView(false);
                         }}
                         className="px-2 py-1.5 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 rounded hover:bg-gray-50 transition"
                     >
@@ -1011,6 +1213,22 @@ export function EditorView({ initialTimetableId, onBack }: EditorViewProps) {
                                 </div>
                             </div>
                         )}
+                        {feasibility.fitness.professorSameHalfPenalty > 0 && (
+                            <div className="mt-2 flex items-start gap-3 px-3 py-2 rounded-lg border bg-violet-50 border-violet-200 text-violet-700 bg-white/60">
+                                <span className="text-base mt-0.5 flex-shrink-0">🕐</span>
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-bold text-xs">Prof Same-Half</span>
+                                        <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-violet-100 text-violet-700 border border-violet-200">
+                                            {feasibility.fitness.professorSameHalfPenalty}
+                                        </span>
+                                    </div>
+                                    <p className="text-[10px] mt-0.5 opacity-80 leading-snug">
+                                        Professors teaching in both morning and afternoon on the same day. Ideally each professor stays in one half.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 );
             })()}
@@ -1074,8 +1292,9 @@ export function EditorView({ initialTimetableId, onBack }: EditorViewProps) {
                     </div>
 
                     <div className="mt-3 text-xs text-gray-400 text-center">
-                        💡 Drag & drop class items between cells. Click the ✏️ icon on hover to edit room/professor.
-                        Click 'Check' in the top bar to verify constraints.
+                        {showMasterView
+                            ? '🌐 Campus View: showing all published timetables + current TT. Current TT slots are editable; published slots are read-only.'
+                            : '💡 Drag & drop class items between cells. Click the ✏️ icon on hover to edit room/professor. Click \'Check\' to verify constraints.'}
                     </div>
                 </>
             )}

@@ -20,6 +20,7 @@ interface FetchedSlot {
   subject_name: string;
   professor_name: string;
   room_name: string;
+  room_type: string;
   group_name: string;
   semester: number;
 }
@@ -50,6 +51,7 @@ export function MasterRoomViewer({ onBack }: MasterRoomViewerProps) {
   // --- Filtering State ---
   const [availableBuildings, setAvailableBuildings] = useState<string[]>([]);
   const [selectedBuilding, setSelectedBuilding] = useState<string>('All');
+  const [selectedRoomType, setSelectedRoomType] = useState<string>('All');
 
   const pdfRef = useRef<HTMLDivElement>(null);
 
@@ -97,7 +99,7 @@ export function MasterRoomViewer({ onBack }: MasterRoomViewerProps) {
         .from('timetable_slots')
         .select(`
           id, day_of_week, start_time, end_time, slot_type,
-          subjects (code, name), professors (name), rooms (name), student_groups (name, semester)
+          subjects (code, name), professors (name), rooms (name, room_type), student_groups (name, semester)
         `)
         .in('timetable_id', pubIds);
 
@@ -117,6 +119,7 @@ export function MasterRoomViewer({ onBack }: MasterRoomViewerProps) {
           subject_name: extractVal(s.subjects, 'name'),
           professor_name: extractVal(s.professors, 'name'),
           room_name: extractVal(s.rooms, 'name'),
+          room_type: extractVal(s.rooms, 'room_type'),
           group_name: extractVal(s.student_groups, 'name').replace('Sec', '').trim(),
           semester: s.student_groups?.semester || 0
         }));
@@ -134,11 +137,17 @@ export function MasterRoomViewer({ onBack }: MasterRoomViewerProps) {
     loadAllData();
   }, [loadAllData]);
 
-  // --- 2. Filter Slots by Building ---
+  // --- 2. Filter Slots by Building and Type ---
   const filteredSlots = useMemo(() => {
-    if (selectedBuilding === 'All') return allSlots;
-    return allSlots.filter(s => getBuildingName(s.room_name) === selectedBuilding);
-  }, [allSlots, selectedBuilding]);
+    let result = allSlots;
+    if (selectedBuilding !== 'All') {
+      result = result.filter(s => getBuildingName(s.room_name) === selectedBuilding);
+    }
+    if (selectedRoomType !== 'All') {
+      result = result.filter(s => s.room_type === selectedRoomType);
+    }
+    return result;
+  }, [allSlots, selectedBuilding, selectedRoomType]);
 
   // --- 3. Dynamic Columns (Using Filtered Slots) ---
   const dynamicTimeColumns = useMemo(() => {
@@ -305,7 +314,6 @@ export function MasterRoomViewer({ onBack }: MasterRoomViewerProps) {
         </div>
         <div className="flex flex-wrap gap-2 items-center">
 
-          {/* BUILDING FILTER DROPDOWN */}
           <div className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-300 rounded hover:border-indigo-400 transition-colors">
             <Building2 className="w-3.5 h-3.5 text-gray-500" />
             <select
@@ -317,6 +325,18 @@ export function MasterRoomViewer({ onBack }: MasterRoomViewerProps) {
               {availableBuildings.map(b => (
                 <option key={b} value={b}>{b}</option>
               ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-300 rounded hover:border-indigo-400 transition-colors">
+            <select
+              value={selectedRoomType}
+              onChange={(e) => setSelectedRoomType(e.target.value)}
+              className="text-xs font-semibold text-gray-700 bg-transparent outline-none cursor-pointer"
+            >
+              <option value="All">All Types</option>
+              <option value="Lecture">Lecture Rooms</option>
+              <option value="Lab">Labs</option>
             </select>
           </div>
 

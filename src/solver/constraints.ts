@@ -1,5 +1,5 @@
 import type { ClassSession, Gene, Solution, FitnessResult, SolverInput } from './types';
-import { SLOTS_PER_DAY, BREAK_AFTER_SLOTS, isSyncedBasket } from './constants';
+import { SLOTS_PER_DAY, BREAK_AFTER_SLOTS, LUNCH_AFTER_SLOT, isSyncedBasket } from './constants';
 
 // ─── Hard Constraint Violation Counters ────────────────────────────────────────
 // Each returns the number of violations found.
@@ -254,6 +254,61 @@ function computeRoomUtilizationPenalty(
     return Math.round(totalPenalty * 100);
 }
 
+// ─── Soft Constraint: Professor Same-Half Penalty ───────────────────────────────
+
+/**
+ * For each professor on each day, check if they teach in BOTH the morning half
+ * (slots 1–LUNCH_AFTER_SLOT) and the afternoon half (slots LUNCH_AFTER_SLOT+1–8).
+ * Each such (professor, day) pair adds 1 penalty unit.
+ *
+ * Locked sessions ARE included in the map so that cross-timetable splits are
+ * detected. However, if ALL sessions for a (prof, day) are locked, no penalty
+ * is applied (we can't change them).
+ */
+function computeProfessorSameHalfPenalty(
+    sessions: ClassSession[],
+    solution: Solution,
+    numDays: number,
+): number {
+    // Map: professorId -> day -> { morning, afternoon, hasMovable }
+    const profDayHalf = new Map<string, Map<number, { morning: boolean; afternoon: boolean; hasMovable: boolean }>>();
+
+    for (let i = 0; i < sessions.length; i++) {
+        const s = sessions[i];
+        if (!s.professorId) continue;
+
+        const gene = solution[i];
+        const endSlot = gene.startBucket + s.duration - 1;
+
+        let dayMap = profDayHalf.get(s.professorId);
+        if (!dayMap) {
+            dayMap = new Map();
+            profDayHalf.set(s.professorId, dayMap);
+        }
+
+        let entry = dayMap.get(gene.day);
+        if (!entry) {
+            entry = { morning: false, afternoon: false, hasMovable: false };
+            dayMap.set(gene.day, entry);
+        }
+
+        // A session can span both halves (unlikely but handle it)
+        if (gene.startBucket <= LUNCH_AFTER_SLOT) entry.morning = true;
+        if (endSlot > LUNCH_AFTER_SLOT) entry.afternoon = true;
+        if (!s.isLocked) entry.hasMovable = true;
+    }
+
+    let penalty = 0;
+    for (const dayMap of profDayHalf.values()) {
+        for (let d = 1; d <= numDays; d++) {
+            const entry = dayMap.get(d);
+            // Penalize only if the prof spans both halves AND we can actually move at least one session
+            if (entry && entry.morning && entry.afternoon && entry.hasMovable) penalty++;
+        }
+    }
+    return penalty;
+}
+
 // ─── Combined Fitness Evaluation ───────────────────────────────────────────────
 
 // ─── Basket Configuration ───────────────────────────────────────────────────────
@@ -492,16 +547,19 @@ export function evaluate(input: SolverInput, solution: Solution): FitnessResult 
     const roomUtilizationPenalty = computeRoomUtilizationPenalty(
         sessions, solution, rooms, config.roomUtilizationThreshold, config.roomOverutilizationThreshold,
     );
+    const professorSameHalfPenalty = computeProfessorSameHalfPenalty(sessions, solution, numDays);
 
     const total = hardViolations * config.hardPenalty
         + gapPenalty * config.gapWeight
-        + roomUtilizationPenalty * config.roomUtilizationWeight;
+        + roomUtilizationPenalty * config.roomUtilizationWeight
+        + professorSameHalfPenalty * config.professorSameHalfWeight;
 
     return {
         total,
         hardViolations,
         gapPenalty,
         roomUtilizationPenalty,
+        professorSameHalfPenalty,
         violationBreakdown: {
             timeBoundary,
             breakCrossing,

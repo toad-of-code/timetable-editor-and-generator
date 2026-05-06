@@ -1,0 +1,407 @@
+% Chapter 5
+
+\chapter{Implementation and Results} % Main chapter title
+
+\label{Chapter5} % For referencing the chapter elsewhere, use \ref{Chapter5}
+
+%----------------------------------------------------------------------------------------
+
+This chapter details the concrete implementation of the core algorithms and user interfaces that comprise the IIITA Timetabling System. It highlights the technical solutions developed to address the challenges outlined in previous chapters, specifically focusing on dynamic rendering, real-time conflict detection, personalized user views, the (1+1)-ES automated timetable solver, the interactive drag-and-drop Timetable Editor with LNS auto-fix, and the multi-step Generator Wizard. Finally, it discusses the results of these implementations through the lens of the final user interface.
+
+%-----------------------------------
+\section{Dynamic Time Grid Generation}
+
+A significant challenge in displaying timetables is the variability of time slots. Hardcoding a static grid (e.g., exactly ten 1-hour slots from 9:00 AM to 7:00 PM) results in wasted visual space when classes end early, and fails to accommodate non-standard time ranges (such as a 1.5-hour class).
+
+To solve this, all viewer components in the system implement a \textbf{Dynamic Time Column Generator algorithm}.
+When a timetable is selected, the system fetches all associated \texttt{timetable\_slots}. The algorithm then executes the following steps:
+\begin{enumerate}
+    \item Extracts all unique \texttt{start\_time} and \texttt{end\_time} strings from the raw slot data.
+    \item Injects hardcoded institutional break times: \texttt{10:50} to \texttt{11:00} (Morning Break) and \texttt{13:00} to \texttt{14:30} (Lunch Break).
+    \item Sorts all extracted timestamps chronologically to create an array of discrete time boundaries.
+    \item Iterates through adjacent pairs of boundaries to generate standard columns.
+    \item Filters out any generated columns that fall entirely within the lunch or break periods, or that contain absolutely zero scheduled classes.
+\end{enumerate}
+
+The result is a highly responsive grid that only displays columns for active periods, maximizing screen real estate and improving readability.
+
+%-----------------------------------
+\section{Multi-Dimensional Clash Detection Algorithm}
+
+One of the most critical administrative features is the automated detection of scheduling conflicts. The `TimetableViewer` component implements a robust $O(N^2)$ algorithm that compares every slot against every other slot within the selected timetable to detect overlaps.
+
+An overlap is mathematically defined as occurring when:
+\begin{equation}
+    (SlotA.start < SlotB.end) \land (SlotA.end > SlotB.start)
+\end{equation}
+
+When an overlap is detected, the algorithm categorizes the clash into one of four distinct types as summarized in Table~\ref{tab:clash_types}.
+
+\begin{table}[htbp]
+\centering
+\caption{Types of Scheduling Clashes Detected}
+\label{tab:clash_types}
+\renewcommand{\arraystretch}{1.4}
+\begin{tabularx}{\textwidth}{@{} l X @{}}
+\toprule
+\textbf{Clash Type} & \textbf{Logical Condition and Description} \\
+\midrule
+\textbf{Room Clash} & $SlotA.room == SlotB.room$ \newline Two different classes are assigned to the exact same physical space simultaneously. \\
+\textbf{Professor Clash} & $SlotA.professor == SlotB.professor$ \newline A single faculty member is booked to teach two different classes at the same time. \\
+\textbf{Section Clash} & $SlotA.section == SlotB.section \land SlotA.subject \neq SlotB.subject$ \newline A specific student cohort is expected to attend two distinct subjects simultaneously. \\
+\textbf{WMC-Section} & Specialized institutional rule where generic weekend/WMC sessions overlap with standard section sessions. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+These clashes are immediately surfaced to the administrator in a dedicated visual panel, complete with distinct iconography (e.g., a Map Pin for Room clashes, a User icon for Professor clashes), allowing for rapid identification and remediation.
+
+%-----------------------------------
+\section{Inverted Logic: The Free Room Finder}
+
+Traditional scheduling systems focus on when rooms are occupied. However, students and staff frequently need to know when rooms are \textit{available}. The `FreeRoomViewer` component achieves this through an inverted logic algorithm.
+
+Unlike the dynamic grid, the Free Room Finder establishes a hardcoded temporal matrix (e.g., 8:50 AM to 6:30 PM in discrete blocks). 
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    node distance=1.5cm,
+    start/.style={draw, ellipse, fill=blue!10, text width=2cm, align=center, font=\sffamily\scriptsize},
+    process/.style={draw, rectangle, fill=gray!10, text width=6cm, align=center, rounded corners, font=\sffamily\scriptsize},
+    decision/.style={draw, diamond, aspect=2, fill=orange!10, text width=2.5cm, align=center, font=\sffamily\scriptsize},
+    arrow/.style={draw, thick, ->, >=stealth}
+]
+
+\node[start] (init) {Select Day \& Time Cell};
+\node[process, below=of init] (fetch) {Query DB for \textbf{ALL} Campus Rooms\\(Initialize Full Set)};
+\node[process, below=of fetch] (active) {Fetch Active \texttt{timetable\_slots} matching Day \& Time};
+\node[decision, below=of active] (check) {Is Room in\\Active Slot?};
+\node[process, left=of check, xshift=-2cm] (remove) {Remove Room from Set};
+\node[start, below=of check, fill=green!10] (render) {Render Remaining Rooms as Free (Green Badges)};
+
+\draw[arrow] (init) -- (fetch);
+\draw[arrow] (fetch) -- (active);
+\draw[arrow] (active) -- (check);
+\draw[arrow] (check) -- node[above] {Yes} (remove);
+\draw[arrow] (check) -- node[right] {No} (render);
+\draw[arrow] (remove) |- (render);
+
+\end{tikzpicture}
+\caption{Inverted Logic Flowchart for the Free Room Finder Algorithm}
+\label{fig:free_room_flow}
+\end{figure}
+
+The algorithm executes as follows:
+\begin{enumerate}
+    \item The system first queries the database for \textbf{all} existing rooms.
+    \item It then queries the \texttt{timetable\_slots} to retrieve all currently active sessions.
+    \item For every cell in the temporal matrix (Day $\times$ Time), it instantiates the complete set of all campus rooms.
+    \item It iterates through the active sessions. If a session falls within the current cell's Day and Time, that session's \texttt{room\_id} is removed from the set of available rooms.
+\end{enumerate}
+
+The remaining rooms in the set are then rendered in the UI as green badges, instantly showing users where they can find empty spaces across the campus.
+
+\section{React Component Hierarchy}
+
+To maintain a scalable and manageable codebase, the frontend relies on a strict component tree hierarchy. Figure~\ref{fig:component_tree} illustrates the relationship between the global layout and the localized, role-based timetable viewers.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    level 1/.style={sibling distance=5cm, level distance=1.5cm},
+    level 2/.style={sibling distance=3cm, level distance=1.5cm},
+    every node/.style={rectangle, draw, rounded corners, fill=blue!5, text width=2.8cm, align=center, font=\sffamily\scriptsize, minimum height=1cm},
+    edge from parent/.style={draw, thick, ->, >=stealth}
+]
+
+\node[fill=blue!20] {\textbf{AppShell}\\(Global Context)}
+    child {node {\textbf{Sidebar/Navbar}\\(Navigation)}}
+    child {node {\textbf{Dashboard}\\(Routing Container)}
+        child {node[fill=green!10] {\textbf{Student View}\\(Filtered Grid)}}
+        child {node[fill=green!10] {\textbf{Admin View}\\(Excel Importer)}}
+        child {node[fill=green!10] {\textbf{Master View}\\(Full Matrix)}}
+    };
+\end{tikzpicture}
+\caption{Hierarchical Structure of the Core React Components}
+\label{fig:component_tree}
+\end{figure}
+
+%-----------------------------------
+\section{Role-Based Viewer Implementations}
+
+The system provides several specialized views tailored to different stakeholders, summarized in Table~\ref{tab:view_mapping}.
+
+\begin{table}[htbp]
+\centering
+\caption{Role-Based Component Mapping and Data Scope}
+\label{tab:view_mapping}
+\renewcommand{\arraystretch}{1.4}
+\begin{tabularx}{\textwidth}{@{} l X l @{}}
+\toprule
+\textbf{Stakeholder Role} & \textbf{Component View} & \textbf{Primary Filter Parameter} \\
+\midrule
+Student & \texttt{StudentCustomTimetable} & Semester \& Specific Section \\
+Professor & \texttt{ProfessorTimetableViewer} & Faculty Email/ID \\
+Department Admin & \texttt{RoomTimetableViewer} & Specific Room Name \\
+Campus Admin & \texttt{MasterRoomViewer} & Building Prefix (e.g., "CC-3") \\
+Facility Staff & \texttt{FreeRoomViewer} & Temporal Matrix (Empty Rooms) \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Student Custom Timetable}
+The student view is designed for maximum personalization. Given the complexity of modern curricula featuring numerous electives and minor tracks, a master timetable is overwhelming. The `StudentCustomTimetable` allows students to select their semester and specific section.
+
+Crucially, it implements a \textbf{Smart Merging algorithm}. Often, lectures are held for "All Sections" simultaneously, while practical laboratory sessions are split by specific section (e.g., "Sec A"). The merging algorithm intelligently filters the master data, pulling in slots explicitly assigned to the student's selected section \textit{and} slots assigned to the generic "All" section, combining them into a single, cohesive personal schedule.
+
+Students can further refine this by toggling specific elective subjects on or off using a sidebar checklist. These preferences are persisted in the browser's `localStorage`, ensuring their custom view is maintained across sessions without requiring dedicated student user accounts.
+
+\subsection{Master Occupancy Viewer}
+For campus administrators, the `MasterRoomViewer` provides a macro-level perspective. It displays a dense grid where rows represent physical rooms rather than student groups. Because an institution may have hundreds of rooms, this view implements a building-level filter. The system extracts the building prefix from the room name (e.g., identifying "CC-3" from "CC-3-1001") and allows the administrator to filter the grid, rendering a manageable overview of specific campus zones.
+
+%-----------------------------------
+\section{Export Mechanisms and Results}
+
+To bridge the gap between the digital system and offline requirements, the platform implements robust export mechanisms.
+
+\subsection{Client-Side PDF Generation}
+Users can generate PDFs of their current view. This relies on the `html-to-image` library to capture the DOM state as a PNG, which is then embedded into a `jsPDF` document. A significant technical hurdle overcome during implementation was the handling of sticky CSS headers; the capture logic temporarily disables `position: sticky` properties on the DOM elements right before capture to ensure the entire scrollable area is rendered to the image buffer accurately.
+
+\subsection{Google Sheets API Export}
+The `RoomTimetableViewer` and `FreeRoomViewer` support bulk export directly to Google Sheets. Using the Google Identity Services client, the React application constructs a multi-layered batch update request. This request not only writes the raw string data into the cells but explicitly formats the workbook—creating separate worksheets for different rooms, freezing header rows, applying pink and gray background colors to headers, and drawing solid borders—resulting in a highly professional, ready-to-share document directly in the administrator's Google Drive.
+
+\subsection{User Interface Evaluation}
+The resulting application is a highly responsive, modern interface. By utilizing Tailwind CSS, the application maintains a clean, minimalist aesthetic with clear color coding (e.g., orange for practicals, green for tutorials). The elimination of page reloads between views, combined with the instantaneous clash detection, represents a monumental upgrade in usability and efficiency compared to traditional spreadsheet workflows.
+
+%-----------------------------------
+%-----------------------------------
+%  NEW SECTIONS: SOLVER, EDITOR, GENERATOR
+%-----------------------------------
+%-----------------------------------
+
+\section{The (1+1)-ES Timetable Solver}
+\label{sec:solver}
+
+The automated timetable generator is a central contribution of this project. It implements a (1+1) Evolution Strategy (ES)~\cite{rechenberg1973evolution,schwefel1995evolution} to search for conflict-free schedules that satisfy all institutional constraints. This section formalizes the problem representation, the fitness function, the mutation operators, and the adaptive control mechanisms.
+
+\subsection{Chromosome Representation}
+
+The solver models a complete timetable as a \textbf{Solution}, which is an ordered array of \textbf{Gene} objects. Each Gene $g_i$ encodes the scheduling decision for the $i$-th class session and is defined as:
+
+\begin{equation}
+    g_i = (\text{day}_i, \text{startBucket}_i, \text{roomIndex}_i)
+\end{equation}
+
+\noindent where:
+\begin{itemize}
+    \item $\text{day}_i \in \{1, 2, 3, 4, 5\}$ corresponds to Monday through Friday.
+    \item $\text{startBucket}_i \in \{1, 2, \dots, 8\}$ is the starting time slot (each slot represents one hour, from 08:50 to 18:30).
+    \item $\text{roomIndex}_i$ is the index into the available room array.
+\end{itemize}
+
+Each class session is represented by a \texttt{ClassSession} object containing immutable metadata: the subject identifier, student group, assigned professor, session duration, slot type (Lecture, Tutorial, or Practical), home room index, elective basket membership, and a locked flag indicating whether the session belongs to a previously published timetable.
+
+\subsection{Session Expansion: The 2+1 Lecture Format}
+
+Before solving, the \texttt{dataPrep.ts} module transforms high-level subject configurations (L-T-P counts) into individual \texttt{ClassSession} entries. A key institutional rule is the \textbf{2+1 lecture format}: for core subjects with $L \geq 2$ lectures per week, the system creates:
+\begin{itemize}
+    \item Exactly \textbf{one} double-lecture block of duration 2 hours (\texttt{lecturePairIndex = 0}).
+    \item The remaining $L - 2$ lectures as individual 1-hour sessions (\texttt{lecturePairIndex = -1}).
+\end{itemize}
+
+This is enforced as a hard constraint: the double-lecture and all single-lectures for the same subject and group must be placed on \emph{different} days.
+
+\subsection{Fitness Function}
+
+The quality of a candidate solution $S$ is evaluated by a composite fitness function:
+
+\begin{equation}
+    f(S) = H(S) \cdot W_{\text{hard}} + G(S) \cdot W_{\text{gap}} + R(S) \cdot W_{\text{room}} + P(S) \cdot W_{\text{prof}}
+\end{equation}
+
+\noindent where:
+\begin{itemize}
+    \item $H(S)$ is the total number of hard constraint violations.
+    \item $G(S)$ is the student schedule gap penalty (soft).
+    \item $R(S)$ is the room utilization penalty (soft).
+    \item $P(S)$ is the professor same-half penalty (soft).
+    \item $W_{\text{hard}} = 1000$, $W_{\text{gap}} = 1.0$, $W_{\text{room}} = 0.8$, $W_{\text{prof}} = 5.0$ are configurable weights.
+\end{itemize}
+
+The large hard penalty weight ($W_{\text{hard}} = 1000$) ensures that the solver prioritizes eliminating all hard violations before optimizing soft constraints. A feasible solution has $H(S) = 0$.
+
+\subsection{Hard Constraints}
+
+The system enforces ten hard constraints, summarized in Table~\ref{tab:hard_constraints}.
+
+\begin{table}[htbp]
+\centering
+\caption{Hard Constraints Enforced by the Solver}
+\label{tab:hard_constraints}
+\renewcommand{\arraystretch}{1.4}
+\begin{tabularx}{\textwidth}{@{} c l X @{}}
+\toprule
+\textbf{\#} & \textbf{Constraint Name} & \textbf{Description} \\
+\midrule
+1 & Time Boundary & A session must not extend beyond slot 8 (18:30). \\
+2 & Break/Lunch Crossing & A multi-slot session must not span across a break boundary (slots 2$\to$3 or 4$\to$5). \\
+3 & Room Non-Overlap & At most one session may occupy a given room at any (day, slot). \\
+4 & Professor Non-Overlap & A professor can teach at most one session at any given slot. No elective exemption. \\
+5 & Group Non-Overlap & A student group can attend at most one session per slot. Elective--elective pairs and same-basket pairs are exempt. \\
+6 & Elective Basket Sync & Synced baskets (HSMC, MDM) must share the same (day, slot). No two different baskets may share a slot (global anti-clash). \\
+7 & Lab Room & Practical sessions must be assigned to rooms with type ``Lab''. \\
+8 & WMC-Section Overlap & A whole-batch (WMC) session cannot occupy the same slot as any section-level session. \\
+9 & Home Room & Core lectures and tutorials must be placed in their assigned home room. \\
+10 & 2+1 Lecture Format & The double-lecture block and single-lectures for the same subject+group must be on different days. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Soft Constraints}
+
+Three soft constraints provide schedule quality optimization beyond feasibility:
+
+\begin{enumerate}
+    \item \textbf{Student Gap Penalty $G(S)$:} For each student group on each day, the penalty counts empty slots between their first and last scheduled class. Formally, if a group occupies a set of slots $\mathcal{S}_d$ on day $d$, the gap is $(\max(\mathcal{S}_d) - \min(\mathcal{S}_d) + 1) - |\mathcal{S}_d|$.
+
+    \item \textbf{Room Utilization Penalty $R(S)$:} For practical and elective sessions, the solver computes the utilization ratio $u = \text{studentCount} / \text{roomCapacity}$. If $u < 0.60$ (under-utilization) or $u > 1.20$ (over-utilization), a proportional penalty is applied. The result is scaled to an integer range by multiplying by 100.
+
+    \item \textbf{Professor Same-Half Penalty $P(S)$:} For each professor on each day, a penalty of 1 is incurred if they teach in both the morning half (slots 1--4) and the afternoon half (slots 5--8). This encourages compact teaching schedules.
+\end{enumerate}
+
+\subsection{Mutation Operators}
+
+The (1+1)-ES generates offspring by applying a small number of mutations to the parent solution. Each generation, the solver randomly selects 3--8\% of mutable (non-locked) sessions and applies one of five mutation operators:
+
+\begin{enumerate}
+    \item \textbf{Day Reassignment:} Assigns a uniformly random new day $d \in \{1, \dots, 5\}$.
+    \item \textbf{Gaussian Time Shift:} Perturbs the start slot by $\Delta = \lfloor \mathcal{N}(0, \sigma^2) \rceil$, clamped to valid bounds. If the new position crosses a break boundary, the slot is snapped to the nearest valid start using a precomputed cache.
+    \item \textbf{Type-Aware Room Reassignment:} Assigns a random room respecting the session type: Lab rooms for practicals, lecture rooms for electives, and the fixed home room for core lectures/tutorials.
+    \item \textbf{Swap:} Exchanges the (day, slot, room) of two same-duration sessions. Synced-basket electives are excluded from swapping to preserve group synchronization.
+    \item \textbf{Full Relocate:} Assigns a completely new random (day, slot, room) triple.
+\end{enumerate}
+
+For synced-basket electives (HSMC, MDM), mutations to day, time, or relocation are \emph{propagated} to all members of the sync group, ensuring they remain synchronized.
+
+\subsection{$\sigma$-Adaptation: The 1/5th Success Rule}
+
+The step-size parameter $\sigma$ controls the magnitude of Gaussian time perturbations. The solver adapts $\sigma$ using Rechenberg's 1/5th success rule~\cite{rechenberg1973evolution}. Every $W = 50$ generations (the adaptation window), the success rate $p_s$ (fraction of offspring that improved fitness) is computed:
+
+\begin{equation}
+    \sigma \leftarrow
+    \begin{cases}
+        \sigma \times 1.22 & \text{if } p_s > 1/5 \quad \text{(too many successes $\Rightarrow$ increase exploration)} \\
+        \sigma \times 0.82 & \text{if } p_s < 1/5 \quad \text{(too few successes $\Rightarrow$ decrease step size)} \\
+        \sigma & \text{otherwise}
+    \end{cases}
+\end{equation}
+
+This adaptive mechanism balances exploration (large jumps in the search space) and exploitation (fine-tuning near a local optimum).
+
+\subsection{Stagnation Restart}
+
+If the best fitness does not improve for a configurable number of consecutive generations (the stagnation threshold, typically 25\% of total generations), the solver performs a \textbf{restart}: the current solution is discarded and a fresh random initial solution is generated. The best-ever solution is preserved across restarts via elitist tracking.
+
+\subsection{Locked Sessions and Cross-Semester Awareness}
+
+When generating a timetable for a specific semester, the solver can incorporate \textbf{locked sessions} from previously published timetables of other semesters. These locked sessions are appended to the session array with their \texttt{isLocked} flag set to \texttt{true}. Their Gene positions are fixed and never mutated. However, they participate fully in constraint evaluation---particularly room overlap and professor overlap checks---ensuring that the new timetable does not conflict with existing published schedules.
+
+\subsection{Solver Execution Flow}
+
+The solver runs asynchronously in the browser using batched \texttt{setTimeout} calls (processing 200 generations per batch) to maintain UI responsiveness. The overall flow is:
+\begin{enumerate}
+    \item Generate an initial solution using round-robin day assignment and break-aware slot placement.
+    \item If a seed timetable is provided, override matched sessions with their existing positions.
+    \item Pin locked genes from published timetables.
+    \item For each generation: mutate the parent, evaluate the offspring, accept if $f(\text{offspring}) \leq f(\text{parent})$ (elitist selection).
+    \item Every $W$ generations, adapt $\sigma$ via the 1/5th rule.
+    \item If stagnation is detected, restart with a fresh random solution.
+    \item Report progress (current fitness, $\sigma$, success rate, violation breakdown) to the UI at configurable intervals.
+    \item Terminate on reaching the maximum generation count, achieving zero hard violations, or user cancellation.
+\end{enumerate}
+
+%-----------------------------------
+\section{The Interactive Timetable Editor}
+\label{sec:editor}
+
+The \texttt{EditorView} component provides an interactive, drag-and-drop interface for manually refining timetables---whether generated by the solver or imported from Excel. This section describes its key features.
+
+\subsection{Drag-and-Drop Slot Rearrangement}
+
+The editor renders a dense 5-day $\times$ $N$-slot grid, where each scheduled session appears as a draggable card. Administrators can drag any session card from one cell to another to reassign its day and start time. The system automatically recalculates the end time based on the session's duration and validates that the new position does not fall in a lunch or break slot. All drag operations push the previous state onto a 30-level undo stack.
+
+\subsection{Inline Editing}
+
+Each session card exposes a hover-activated edit panel that allows inline modification of:
+\begin{itemize}
+    \item \textbf{Room Assignment:} A cascading two-step selector where the administrator first selects the room type (Lecture or Lab), then picks from filtered rooms of that type.
+    \item \textbf{Professor Assignment:} A dropdown populated from the full professor list.
+\end{itemize}
+
+\subsection{Real-Time Conflict Visualization}
+
+The editor implements a client-side clash detection algorithm that runs on every state change. Sessions involved in any conflict are highlighted with a red background and ring border. The algorithm checks the same constraints as the solver: room overlaps, professor overlaps, section overlaps (with elective exemptions), WMC-section conflicts, cross-basket elective clashes, and the 2+1 same-day lecture rule.
+
+\subsection{Feasibility Check}
+
+A dedicated ``Check Feasibility'' button constructs a full \texttt{SolverInput} from the current editor state, converts the slot positions into a \texttt{Solution} (Gene array), appends locked sessions from all other published timetables, and invokes the solver's \texttt{evaluate()} function. The result displays the total fitness score and the per-constraint violation breakdown, giving the administrator a precise understanding of remaining issues.
+
+\subsection{LNS Auto-Fix}
+
+When conflicts exist, the administrator can invoke the \textbf{Large Neighbourhood Search (LNS)} auto-fix~\cite{shaw1998using}. This routine:
+\begin{enumerate}
+    \item Identifies all session indices involved in any hard constraint violation (the ``clashing set'').
+    \item Iterates for up to 1500 attempts. In each attempt, a random session from the clashing set is selected and a random mutation (relocate, time shift, or room change) is applied.
+    \item If the mutation reduces the total fitness, the improved solution is accepted and the clashing set is refreshed.
+    \item The process terminates early if all hard violations reach zero.
+\end{enumerate}
+
+The LNS targets only the problematic sessions rather than reoptimizing the entire schedule, making it significantly faster than a full solver run while preserving the administrator's manual adjustments to non-conflicting sessions.
+
+\subsection{Master View}
+
+The editor includes a ``Master View'' toggle that fetches and overlays all slots from other published timetables as read-only, semi-transparent cards in the grid. This provides cross-semester situational awareness, allowing the administrator to visually verify that no room or professor conflicts exist between the current draft and previously published schedules.
+
+%-----------------------------------
+\section{The Generator Wizard}
+\label{sec:generator}
+
+The \texttt{GeneratorView} component provides a guided, multi-step configuration workflow that prepares the solver input and launches the optimization process. The workflow consists of the following steps:
+
+\subsection{Step 1: Cluster Selection}
+
+The administrator selects a \texttt{semester\_cluster} (e.g., ``IT Dept, Sem 5, Batch 2023''). This scopes the scheduling problem by loading the associated subjects (with L-T-P configurations) and student groups (sections) from the database.
+
+\subsection{Step 2: Home Room Mapping}
+
+Each student group (section) is mapped to a home room. The system implements an automatic \textbf{floor-based home room policy}: rooms follow the naming pattern \texttt{CC-3-5}\emph{x}\emph{yy}, where \emph{x} is the floor digit derived from the semester number (Semesters 1--2 $\to$ floor 0, 3--4 $\to$ floor 1, 5--6 $\to$ floor 2) and \emph{yy} is the section suffix (A $\to$ 06, B $\to$ 07, C $\to$ 54, D $\to$ 55). This policy is applied automatically on cluster selection and can be overridden manually.
+
+\subsection{Step 3: Professor Assignment Matrix}
+
+An interactive matrix presents subjects as rows and student groups as columns. For each cell, the administrator selects a professor from a dropdown filtered by the \texttt{professor\_expertise} table. Each subject supports four scheduling modes:
+\begin{itemize}
+    \item \textbf{Sections:} Assigns individually to each section (A, B, C, D).
+    \item \textbf{All (WMC):} Assigns to the whole-batch ``WMC'' group.
+    \item \textbf{IT-BI:} Assigns only to the IT-BI interdisciplinary group.
+    \item \textbf{Disabled:} Excludes the subject from scheduling entirely.
+\end{itemize}
+
+An ``Auto-Fill'' button populates all unset cells using round-robin professor assignment from the expertise pool.
+
+\subsection{Step 4: Seed and Lock Configuration}
+
+Before launching the solver, the administrator may optionally:
+\begin{itemize}
+    \item Select a \textbf{seed timetable} to warm-start the solver from an existing schedule rather than a random initial solution.
+    \item Select one or more \textbf{locked timetables} whose slots are injected as immutable constraints into the solver, enabling cross-semester conflict avoidance.
+\end{itemize}
+
+\subsection{Step 5: Solver Execution and Results}
+
+Upon clicking ``Generate Timetable,'' the system constructs the \texttt{SolverInput}, launches the (1+1)-ES solver, and displays a real-time progress card showing: current generation, best fitness, $\sigma$, success rate, and the violation breakdown. Upon completion, a results panel displays the final fitness and provides options to:
+\begin{itemize}
+    \item Save the generated timetable to the database as a new draft.
+    \item Transition directly to the \texttt{EditorView} for manual refinement.
+    \item Download a comprehensive diagnostic log file.
+\end{itemize}
