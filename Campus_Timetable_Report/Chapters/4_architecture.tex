@@ -6,23 +6,22 @@
 
 %----------------------------------------------------------------------------------------
 
-In this chapter, we walk through the structural design of the IIITA Timetabling System. We cover the overall application topology, the relational database schema, how we ingest data from Excel files, the solver module architecture, and the routing logic that ties everything together.
+This chapter details the structural design of the IIITA Timetabling System. It defines the application topology, the relational database schema, the Excel data ingestion pipeline, the solver's internal data model, and the state-based routing logic used for view management.
 
 %-----------------------------------
 \section{Application Topology}
 
-Our system follows a classic three-tier architecture adapted for the modern web using a Backend-as-a-Service (BaaS) model.
-
+The system architecture consists of three primary components:
 \begin{itemize}
-    \item \textbf{Client Tier (React SPA):} The frontend is a Single Page Application (SPA) responsible for all user interactions, data formatting, client-side clash detection, and PDF generation. It communicates asynchronously with the backend via secure REST API calls over HTTPS.
-    \item \textbf{Backend Tier (Supabase):} Acting as the serverless backend, Supabase provides an auto-generated API gateway, handles user authentication, and interfaces directly with the underlying database.
-    \item \textbf{Data Tier (PostgreSQL):} The relational database stores all normalized institutional data, including users, entities (rooms, subjects, professors), and the core timetable slots.
+    \item \textbf{Frontend (React SPA):} A Single Page Application that handles user interaction, clash detection, and PDF generation. It interacts with the backend through REST API calls.
+    \item \textbf{Backend (Supabase):} Provides the API gateway, manages user authentication, and handles database interactions.
+    \item \textbf{Database (PostgreSQL):} A relational database that stores institutional data, including users, rooms, subjects, faculty, and the generated timetable slots.
 \end{itemize}
 
 %-----------------------------------
 \section{Database Schema Design}
 
-A well-structured relational schema is the backbone of any scheduling system. Our database is heavily normalised to prevent data duplication and enforce referential integrity. It contains eight tables in total---six core entities and two solver-support mapping tables. Figure~\ref{fig:er_diagram} shows the full entity-relationship diagram.
+The database schema is normalized to ensure data integrity and minimize redundancy. It consists of eight tables: six core entity tables and two mapping tables for the solver engine. Figure~\ref{fig:er_diagram} illustrates the Entity-Relationship (ER) diagram.
 
 \subsection{Core Entities}
 
@@ -78,15 +77,15 @@ A well-structured relational schema is the backbone of any scheduling system. Ou
 \end{figure}
 
 \begin{itemize}
-    \item \textbf{\texttt{timetables}:} The parent container for a schedule iteration (e.g., ``IT Sem-5 (2023)''). Key attributes include \texttt{name}, \texttt{semester}, \texttt{academic\_year} (e.g., ``2025-26''), \texttt{status} (draft or published), \texttt{lunch\_start}/\texttt{lunch\_end} (defaults: 13:00--14:30), \texttt{created\_by} (the admin user), and \texttt{published\_at}.
-    \item \textbf{\texttt{subjects}:} Stores all offered courses. Attributes include the unique \texttt{code}, \texttt{name}, total \texttt{credits}, \texttt{subject\_type} (Core, Elective, or Minor), L-T-P breakdown (\texttt{lectures}, \texttt{tutorials}, \texttt{practicals}), \texttt{practical\_duration} (in minutes), and \texttt{elective\_group} (e.g., ``HSMC'', ``Basket 1'').
-    \item \textbf{\texttt{professors}:} Faculty members, uniquely identified by \texttt{email}, with \texttt{name} and \texttt{department}.
-    \item \textbf{\texttt{rooms}:} Physical campus rooms. Attributes include the unique \texttt{name} following the \texttt{CC-\{building\}-\{number\}} convention (e.g., ``CC-3-5106'', ``CC-3-5207''), seating \texttt{capacity} (default 60), and \texttt{room\_type} (Lecture or Lab---derived from whether the room hosts only Practical sessions).
-    \item \textbf{\texttt{student\_groups}:} A student cohort defined by \texttt{name} (e.g., ``Sec A'', ``Sec B'', ``WMC'' for whole-batch, or ``IT-BI'' for the IT-BI programme), \texttt{semester}, \texttt{program} (``B.Tech''), and \texttt{group\_type} (``Core''). The unique constraint is on \texttt{(name, semester)}.
+    \item \textbf{\texttt{timetables}:} The container for a specific schedule. It stores the iteration name, semester, academic year, and lunch break constraints.
+    \item \textbf{\texttt{subjects}:} Contains course metadata, including the course code, credit structure (L-T-P), and elective grouping.
+    \item \textbf{\texttt{professors}:} Stores faculty information, uniquely identified by email.
+    \item \textbf{\texttt{rooms}:} Physical room data including capacity and room type (Lecture Hall or Laboratory).
+    \item \textbf{\texttt{student\_groups}:} Defines student cohorts by program, semester, and section.
 \end{itemize}
 
 \subsection{The Central Hub: \texttt{timetable\_slots}}
-The \texttt{timetable\_slots} table is the heart of the schema---a massive junction table that links a specific timetable to a subject, professor, room, and student group at a particular point in time. Table~\ref{tab:schema_slots} lists every column.
+The \texttt{timetable\_slots} table is the primary junction table connecting timetables to subjects, professors, rooms, and student groups. Table~\ref{tab:schema_slots} details its structure.
 
 \begin{table}[htbp]
 \centering
@@ -111,17 +110,15 @@ The \texttt{timetable\_slots} table is the heart of the schema---a massive junct
 \end{tabularx}
 \end{table}
 
-\subsection{Generator and Solver Support Entities}
-To support automated timetable generation, the schema includes three mapping tables (shown in green in Figure~\ref{fig:er_diagram}). These are used by the Intelligent Generator and the solver engine:
+To support automated generation, the schema includes mapping tables used by the solver engine:
 \begin{itemize}
-    \item \textbf{\texttt{semester\_clusters}:} Defines active academic clusters (e.g., Batch 2023, Semester 3, Department ``IT''). Attributes include \texttt{batch\_year}, \texttt{semester\_number}, \texttt{department}, and \texttt{is\_active}. The generator UI filters for active clusters and uses them to scope the scheduling problem.
-    \item \textbf{\texttt{cluster\_requirements}:} A many-to-many join linking a cluster to the subjects that must be scheduled. Includes \texttt{elective\_basket} (the basket name for elective grouping) and \texttt{estimated\_enrollment} (used by the solver's room utilisation soft constraint).
-    \item \textbf{\texttt{professor\_expertise}:} Links professors to the subjects they are qualified to teach, along with a \texttt{preference\_level}. The auto-fill feature in the Intelligent Generator uses this to intelligently suggest professor assignments.
+    \item \textbf{\texttt{semester\_clusters}:} Groups subjects by batch, semester, and department to define the scope of a scheduling task.
+    \item \textbf{\texttt{cluster\_requirements}:} Maps subjects to clusters, specifying elective groups and estimated enrollment for room allocation constraints.
+    \item \textbf{\texttt{professor\_expertise}:} Defines which subjects a professor can teach and their associated preference levels.
 \end{itemize}
 
-\subsection{Solver Data Model: Class Diagram}
-
-Figure~\ref{fig:class_diagram} presents a UML class diagram of the solver's core data model, showing the relationships between the key TypeScript interfaces that drive the scheduling engine.
+\subsection{Solver Data Structures}
+The solver engine operates on a specific set of TypeScript interfaces that represent the scheduling problem as a Genetic Algorithm chromosome. Figure~\ref{fig:class_diagram} shows the relationships between these core interfaces.
 
 \begin{figure}[htbp]
 \centering
@@ -223,9 +220,7 @@ Figure~\ref{fig:class_diagram} presents a UML class diagram of the solver's core
 \end{figure}
 
 %-----------------------------------
-\section{The Data Ingestion Pipeline}
-
-A major architectural feature of the system is its ability to ingest unstructured data. The transition from an administrator's raw Excel file to normalized database records follows a strict pipeline managed by the \texttt{TimetableImporter} module:
+The system includes a data ingestion module (\texttt{TimetableImporter}) to parse existing Excel-based timetables into the normalized database schema. The process follows a five-step pipeline:
 
 \begin{figure}[htbp]
 \centering
@@ -235,11 +230,11 @@ A major architectural feature of the system is its ability to ingest unstructure
     arrow/.style={draw, thick, ->, >=stealth}
 ]
 
-\node[block] (step1) {\textbf{1. Binary Parsing}\\Reads \texttt{.xlsx} via SheetJS and converts to 2D JSON Array};
-\node[block, below=of step1] (step2) {\textbf{2. Header Synchronization}\\Scans top rows to extract 1-hour and multi-hour time bounds};
-\node[block, below=of step2] (step3) {\textbf{3. Metadata Extraction}\\Uses Regex to map subject codes, credits, and complex faculty assignments};
-\node[block, below=of step3] (step4) {\textbf{4. Grid Traversal}\\Iterates over cells to infer class type (L/T/P) and extract room details};
-\node[block, below=of step4] (step5) {\textbf{5. Review and Mutation}\\Displays editable React data grid; fires asynchronous \texttt{UPSERT} commands to Supabase};
+\node[block] (step1) {\textbf{1. Binary Parsing}\\Converts binary \texttt{.xlsx} data to JSON via \texttt{SheetJS}};
+\node[block, below=of step1] (step2) {\textbf{2. Header Synchronization}\\Extracts time boundaries and identifies merged cells from header rows};
+\node[block, below=of step2] (step3) {\textbf{3. Metadata Extraction}\\Uses Regex to parse course codes, credits, and faculty assignments};
+\node[block, below=of step3] (step4) {\textbf{4. Grid Traversal}\\Iterates over grid cells to map days, times, and room locations};
+\node[block, below=of step4] (step5) {\textbf{5. Review and Commit}\\Manual data validation followed by bulk \texttt{UPSERT} to Supabase};
 
 \draw[arrow] (step1) -- (step2);
 \draw[arrow] (step2) -- (step3);
@@ -252,24 +247,15 @@ A major architectural feature of the system is its ability to ingest unstructure
 \end{figure}
 
 \begin{enumerate}
-    \item \textbf{Binary Parsing:} The user uploads an `.xlsx` file. The `xlsx` library reads the binary stream and converts the active spreadsheet into a two-dimensional JSON array.
-    \item \textbf{Header Synchronization:} The heuristic engine scans Row 2 to identify time boundary headers. It converts both colon and dot formats (e.g., ``9:00-10:00'' or ``9.00-10.00'') into normalised 24-hour strings and detects multi-hour merged-cell blocks for practical sessions.
-    \item \textbf{Metadata Extraction:} The engine locates the ``Course Code / Faculties'' section of the spreadsheet. It applies Regular Expressions to map subject codes to full names and extracts the L-T-P-S credit structure (e.g., ``3-1-0-0''). It also parses complex faculty assignment strings---for instance, identifying that ``Dr.~Sharma(A \& B), Dr.~Gupta(C \& D)'' means Dr.~Sharma teaches Sections A and B while Dr.~Gupta teaches Sections C and D.
-    \item \textbf{Grid Traversal and Extraction:} The engine iterates over the main timetable grid. For each cell, it:
-    \begin{itemize}
-        \item Identifies the current day from the leftmost column.
-        \item Identifies the time bounds from the column header.
-        \item Extracts the subject code, infers the class type (L/T/P) based on cell coloring or text markers, and extracts room and section assignments.
-    \end{itemize}
-    \item \textbf{Review and Mutation:} The extracted raw data is presented to the administrator in an editable React data grid. Upon confirmation, the application fires a sequence of asynchronous \texttt{UPSERT} commands to Supabase, ensuring that all necessary entities (professors, rooms, subjects) exist before performing a bulk \texttt{INSERT} into the \texttt{timetable\_slots} table.
+    \item \textbf{Binary Parsing:} Uses the \texttt{SheetJS} library to read `.xlsx` files and convert them into JSON arrays.
+    \item \textbf{Header Synchronization:} Identifies time-slot boundaries from the header row, supporting various time formats and identifying merged cells for multi-hour sessions.
+    \item \textbf{Metadata Extraction:} Uses Regular Expressions to identify subject codes, faculty names, and credit structures. It handles complex strings such as split-section assignments.
+    \item \textbf{Grid Traversal:} Maps grid cells to specific days and times, extracting room and section information.
+    \item \textbf{Review and Commit:} Provides an interface for manual correction before performing bulk \texttt{UPSERT} operations to Supabase.
 \end{enumerate}
 
 %-----------------------------------
-\section{View Routing and State Management}
-
-The application does not utilize a traditional URL-based router (like React Router). Instead, it employs state-based view switching managed by the root `App.tsx` component. 
-
-A central state variable, `currentView`, dictates which heavy component is mounted into the main viewing area. The available views are:
+The application uses state-based view management rather than traditional URL routing. A central `currentView` state in the root component determines the active module.
 \begin{itemize}
     \item \texttt{import}: Mounts the \texttt{TimetableImporter}.
     \item \texttt{generator}: Mounts the multi-step \texttt{GeneratorView} wizard for automated timetable creation.
@@ -282,4 +268,4 @@ A central state variable, `currentView`, dictates which heavy component is mount
     \item \texttt{report-card}: Mounts the \texttt{ReportCardView}.
 \end{itemize}
 
-This architecture ensures that only the data required for the active view is fetched from the database, minimizing unnecessary network traffic. Custom React hooks, notably \texttt{useGeneratorData} and \texttt{useEditorData}, manage the fetching and caching of complex relational data required by these components, abstracting the Supabase query syntax away from the presentation layer.
+This approach ensures that only the logic and data required for the active module are loaded. Custom hooks (\texttt{useGeneratorData}, \texttt{useEditorData}) manage data fetching and caching, separating the data layer from the UI components.
