@@ -4,7 +4,8 @@
 
 File: src/solver/constraints.ts
 Solver: (1+1)-ES (Evolutionary Strategy)
-Fitness = (Hard Violations × Hard Penalty) + (Gap Penalty × Gap Weight) + (Room Util Penalty × Util Weight)
+Fitness = (Hard Violations × Hard Penalty) + (Gap Penalty × Gap Weight) 
+          + (Room Util Penalty × Util Weight) + (Prof Penalty × Prof Weight)
 
 
 ───────────────────────────────────────────────────────────────────
@@ -23,7 +24,6 @@ Fitness = (Hard Violations × Hard Penalty) + (Gap Penalty × Gap Weight) + (Roo
                span across a structural break.
                • Slot 2 → Slot 3  (10:50 – 11:00 break)
                • Slot 4 → Slot 5  (13:00 – 14:30 lunch)
-               (Single-slot 1-hour sessions are naturally exempt).
 
   3. ROOM NON-OVERLAP
      Function: countRoomOverlaps()
@@ -38,39 +38,30 @@ Fitness = (Hard Violations × Hard Penalty) + (Gap Penalty × Gap Weight) + (Roo
      Function: countGroupOverlaps()
      Rule:     A specific section of students can attend at most ONE session at 
                any given (day, slot).
-     Exception: Concurrent sessions from different synced baskets are allowed here 
-                because they are handled separately by the anti-clash rule below.
+     Exception: Sessions from the SAME basket (Synced or Free) are allowed to overlap 
+                because students pick only one subject per basket.
 
   6. ELECTIVE RULES & SYNCHRONIZATION
      Function: countElectiveSyncViolations()
-     Rule A (Sync): All elective classes belonging to a predefined "Synced Basket" 
-                    (e.g., HSMC or MDM) MUST be scheduled at the exact same (day, slot).
-                    This allows students from different sections to scatter and 
-                    attend the elective they chose.
-     Rule B (Free): Electives in "Free Baskets" (basket-1, basket-2, etc.) can be
-                    scheduled independently — some may overlap, others at different
-                    times. The solver is free to spread them across slots for better
-                    room utilization.
-     Rule C (Anti-Clash): Sessions from DIFFERENT baskets (e.g., Basket-1 vs Basket-2) 
-                          must never overlap. This guarantees a student can safely pick 
-                          one subject from Basket 1 and another from Basket 2 without overlap.
+     Rule A (Sync): All sessions in a "Synced Basket" (e.g., HSMC) MUST be 
+                    scheduled at the exact same (day, slot).
+     Rule B (Free): Electives in "Free Baskets" can be scheduled independently.
+     Rule C (Anti-Clash): Sessions from DIFFERENT baskets must never overlap, 
+                          ensuring students can pick one from each without conflict.
 
   7. LAB ROOM FOR PRACTICALS
      Function: countLabRoomViolations()
-     Rule:     If a sessions slot_type is 'Practical', it MUST be assigned to a room 
-               where the room_type is explicitly 'Lab'. Normal classrooms are invalid.
+     Rule:     Practical sessions MUST be assigned to rooms with room_type 'Lab'.
 
   8. HOME ROOM FOR LECTURES/TUTORIALS
      Function: countHomeRoomViolations()
-     Rule:     Core theoretical lectures and tutorials MUST occur in the designated 
-               'Home Room' specifically assigned to that section/group. 
-               (Practicals and Electives are exempt from this).
+     Rule:     Core lectures and tutorials MUST occur in the designated 'Home Room'.
+               (Practicals and Electives are exempt).
 
   9. WMC (WHOLE BATCH) VS SECTION
      Function: countWMCSectionOverlaps()
-     Rule:     If a session is flagged as WMC (meaning the entire batch must attend, 
-               like a mass guest lecture), no individual sub-section belonging to 
-               that batch can have an independent class scheduled at that time.
+     Rule:     If a WMC session is scheduled, no individual sub-section belonging 
+               to that batch can have a separate core class at that time.
 
   10. 2+1 LECTURE FORMAT
      Function: countTwoOneLectureViolations()
@@ -92,40 +83,26 @@ Fitness = (Hard Violations × Hard Penalty) + (Gap Penalty × Gap Weight) + (Roo
 ───────────────────────────────────────────────────────────────────
                         SOFT CONSTRAINTS
 ───────────────────────────────────────────────────────────────────
-  Soft penalties are optimized to make schedules nicer, but do not invalidate them.
+  Soft penalties optimize for quality but do not invalidate the timetable.
 
   1. STUDENT GAP PENALTY (COMPRESSION)
      Function: computeGapPenalty()
-     Rule:     The solver scans every student groups daily schedule from their first 
-               arrival slot to their final departure slot. For every empty "free" slot 
-               in between, a penalty is added. The solver actively tries to minimize this 
-               to compress the students day and remove awkward waiting periods on campus.
+     Rule:     Minimizes empty "free" slots between a student groups first 
+               and last class of the day to compress their schedule.
 
   2. ROOM UTILIZATION PENALTY
      Function: computeRoomUtilizationPenalty()
-     Rule:     For each session, the solver checks how well the assigned rooms capacity
-               matches the number of students attending (studentCount / roomCapacity).
-               — If the fill ratio drops below 60%, a graduated penalty is applied
-                 (under-utilization: wasteful big room for small class)
-               — If the fill ratio exceeds 120%, a graduated penalty is applied
-                 (over-utilization: room too small for the class)
-               Example (under): Room cap = 100, students = 10 → util = 10% → penalty = 50
-               Example (over):  Room cap = 50, students = 80 → util = 160% → penalty = 40
+     Rule:     Encourages efficient use of space. Penalties apply if room fill 
+               ratio is < 60% (under-util) or > 120% (over-util).
      Config:   roomUtilizationWeight = 0.8
-               roomUtilizationThreshold = 0.60 (60% minimum fill)
-               roomOverutilizationThreshold = 1.20 (120% maximum fill)
-     Note:     Locked sessions (from published timetables) are exempt.
 
   3. PROFESSOR SAME-HALF PENALTY
      Function: computeProfessorSameHalfPenalty()
-     Rule:     For each professor on each day, the solver checks whether they
-               have classes in BOTH the morning half (slots 1–4, up to 13:00)
-               and the afternoon half (slots 5–8, from 14:30). If they do,
-               a penalty of 1 is added for that (professor, day) pair.
-               The solver tries to keep each professors daily sessions confined
-               to a single half of the day.
+     Rule:     Encourages compact faculty schedules. A penalty is added if a 
+               professor teaches in both Morning (1-4) and Afternoon (5-8) halves.
+     Note:     Locked sessions are included to detect cross-semester splits, 
+               but penalty only applies if a movable session is present.
      Config:   professorSameHalfWeight = 5.0
-     Note:     Locked sessions are excluded from this check.
 
 
 ───────────────────────────────────────────────────────────────────
@@ -150,15 +127,14 @@ Fitness = (Hard Violations × Hard Penalty) + (Gap Penalty × Gap Weight) + (Roo
                       MUTATOR BEHAVIORS
 ───────────────────────────────────────────────────────────────────
 
-  • Mutate Time: Uses dynamic (1+1)-ES σ (sigma) via the 1/5th Rule context.
-  • Sync Lock: Day, Time, and Relocate mutations forcibly drag entire synced 
-    elective baskets with them to keep them synchronized.
-  • Swap: Only allowed to swap core classes with identical durations. 
-    Electives cannot be swapped.
-  • Break Snap: Time mutations that push a class over a break boundary automatically 
-    snap the class to the nearest safe valid slot.
+  • Mutate Time: Uses dynamic (1+1)-ES σ (sigma) via the 1/5th Rule.
+  • Sync Lock: Mutations forcibly drag entire synced elective baskets.
+  • Swap: Allowed for core sessions of identical duration.
+  • Break Snap: Automatically snaps mutated slots to safe start times.
 
-═══════════════════════════════════════════════════════════════════
+
+───────────────────────────────────────────────────────────────────
+
 make groups in baskets
 
 mtech spec core or elec every subject

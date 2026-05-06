@@ -2,11 +2,338 @@
 
 \chapter{Implementation and Results} % Main chapter title
 
-\label{Chapter5} % For referencing the chapter elsewhere, use \ref{Chapter5}
+\label{Chapter5}
 
 %----------------------------------------------------------------------------------------
 
-This is where everything comes together. In this chapter, we walk through the key algorithms and interfaces we built for the IIITA Timetabling System---from the dynamic grid rendering and real-time conflict detection, through to the (1+1)-ES solver, the interactive drag-and-drop editor, and the multi-step Intelligent Generator. Along the way, we explain the design decisions we made and why.
+\section{Introduction to the Optimization Engine}
+
+The transition from data ingestion to the core solver introduces a highly constrained NP-hard optimization problem. The IIITA Timetabling System models this challenge mathematically, solving it via client-side heuristics. Rather than relying on traditional deterministic approaches which fail to scale, the system employs an evolutionary search mechanism. The engine processes high-dimensional inputs---comprising student cohorts, faculty assignments, and spatial capacities---and systematically navigates a vast, discontinuous search space to identify a globally optimal, conflict-free schedule.
+
+\begin{figure}[htbp]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+    actor/.style={rectangle, draw, fill=blue!10, text width=1.8cm, align=center, font=\sffamily\scriptsize, minimum height=0.7cm, rounded corners=2pt},
+    lifeline/.style={dashed, gray},
+    msg/.style={->, >=stealth, thick, font=\sffamily\tiny},
+    rmsg/.style={->, >=stealth, thick, dashed, font=\sffamily\tiny},
+    activation/.style={fill=blue!8, draw, minimum width=0.3cm},
+    note/.style={rectangle, draw, fill=yellow!10, text width=3cm, align=left, font=\sffamily\tiny, rounded corners}
+]
+
+% Actors
+\node[actor] (admin) at (0,0) {\textbf{Admin}};
+\node[actor] (gen) at (3.5,0) {\textbf{Generator\\View}};
+\node[actor] (db) at (7,0) {\textbf{Supabase\\DB}};
+\node[actor] (prep) at (10.5,0) {\textbf{dataPrep}};
+\node[actor] (solver) at (14,0) {\textbf{Solver\\Engine}};
+
+% Lifelines
+\foreach \x in {admin, gen, db, prep, solver} {
+    \draw[lifeline] (\x.south) -- ++(0,-14);
+}
+
+% Messages
+\draw[msg] (0,-1.2) -- node[above] {1. Select Cluster} (3.5,-1.2);
+\draw[msg] (3.5,-1.8) -- node[above] {2. Fetch subjects, groups} (7,-1.8);
+\draw[rmsg] (7,-2.4) -- node[above] {3. Return cluster data} (3.5,-2.4);
+
+\draw[msg] (0,-3.2) -- node[above] {4. Map rooms, assign profs} (3.5,-3.2);
+
+\draw[msg] (0,-4.0) -- node[above] {5. Configure seed \& locks} (3.5,-4.0);
+\draw[msg] (3.5,-4.6) -- node[above] {6. Fetch locked slots} (7,-4.6);
+\draw[rmsg] (7,-5.2) -- node[above] {7. Return locked sessions} (3.5,-5.2);
+
+\draw[msg] (0,-6.0) -- node[above] {8. Click ``Generate''} (3.5,-6.0);
+\draw[msg] (3.5,-6.6) -- node[above] {9. prepareSolverInput()} (10.5,-6.6);
+\draw[rmsg] (10.5,-7.2) -- node[above] {10. SolverInput bundle} (3.5,-7.2);
+
+\draw[msg] (3.5,-7.8) -- node[above] {11. runSolver(input)} (14,-7.8);
+
+% Solver loop
+\draw[msg] (14,-8.6) -- node[above] {12. onProgress()} (3.5,-8.6);
+\node[note, right=0.3cm of solver, yshift=-9cm] (loop) {Repeats every\\reportInterval\\generations};
+\draw[rmsg] (14,-9.4) -- node[above] {13. onProgress()} (3.5,-9.4);
+
+\draw[rmsg] (14,-10.4) -- node[above] {14. SolverResult} (3.5,-10.4);
+
+\draw[msg] (0,-11.2) -- node[above] {15. Click ``Save''} (3.5,-11.2);
+\draw[msg] (3.5,-11.8) -- node[above] {16. INSERT timetable + slots} (7,-11.8);
+\draw[rmsg] (7,-12.4) -- node[above] {17. Confirm saved} (3.5,-12.4);
+\draw[rmsg] (3.5,-13.0) -- node[above] {18. Navigate to EditorView} (0,-13.0);
+
+\end{tikzpicture}
+}%
+\caption{Sequence Diagram: End-to-End Intelligent Generator Workflow}
+\label{fig:generator_sequence}
+\end{figure}
+
+\section{Mathematical Representation of the Schedule}
+
+To facilitate computational optimization, the schedule is encoded into a specific data structure known as a \textit{Chromosome}. The solver models a complete timetable $S$ as an ordered array of \textit{genes}. Each gene $g_i \in S$ encodes the precise scheduling decision for the $i$-th class session, mapping it to a spatial and temporal coordinate. 
+
+Formally, a gene is defined as a tuple:
+\begin{equation}
+    g_i = (d_i, t_i, r_i)
+\end{equation}
+where:
+\begin{itemize}
+    \item $d_i \in \{1, 2, 3, 4, 5\}$ represents the day of the week (Monday through Friday).
+    \item $t_i \in \{1, 2, \dots, 8\}$ represents the discrete start time slot (each slot corresponding to one hour, from 08:50 to 18:30).
+    \item $r_i \in \mathcal{R}$ is the index into the array of available physical rooms.
+\end{itemize}
+
+Each gene is invariably linked to an immutable \texttt{ClassSession} object that contains the session's metadata: the specific subject identifier, the student group $G_i$, the assigned professor $p_i$, the duration $D_i$, and the specific slot type (Lecture, Tutorial, or Practical).
+
+\section{Mathematical Formulation of Constraints}
+
+The optimization objective is governed by a composite fitness function that evaluates both the feasibility and the quality of the candidate solution $S$.
+
+\subsection{Hard Constraints (The Feasibility Space)}
+
+Hard constraints define the boundary of feasible solutions. A schedule is strictly invalid if any hard constraint is violated. For two distinct sessions $i$ and $j$, we define the temporal overlap condition as:
+\begin{equation}
+    \text{overlap}(t_i, t_j) = \begin{cases} 
+      1 & \text{if } \max(t_i, t_j) \le \min(t_i + D_i - 1, t_j + D_j - 1) \\
+      0 & \text{otherwise}
+   \end{cases}
+\end{equation}
+
+The engine enforces the following critical hard penalties:
+\begin{itemize}
+    \item \textbf{Professor Overlap Penalty:} A professor $p$ cannot be physically present in two different locations at time $t$. 
+    \begin{equation}
+        \sum_{i \neq j} \mathbb{I}(p_i = p_j \land d_i = d_j \land \text{overlap}(t_i, t_j)) = 0
+    \end{equation}
+
+    \item \textbf{Student Group Overlap Penalty:} A specific student cohort $G$ cannot attend two distinct subjects simultaneously. (Concurrent sessions from the same synchronized elective basket are mathematically exempted).
+    \begin{equation}
+        \sum_{i \neq j} \mathbb{I}(G_i = G_j \land d_i = d_j \land \text{overlap}(t_i, t_j) \land \neg \text{SameBasket}(i, j)) = 0
+    \end{equation}
+
+    \item \textbf{Room Clash Penalty:} A physical room $r$ can host at most one session at any given time.
+    \begin{equation}
+        \sum_{i \neq j} \mathbb{I}(r_i = r_j \land d_i = d_j \land \text{overlap}(t_i, t_j)) = 0
+    \end{equation}
+
+    \item \textbf{Lunch Boundary Enforcement:} Sessions cannot cross the designated lunch break ($B_{lunch}$ from 13:00 to 14:30, bounded between slot 4 and 5). 
+    \begin{equation}
+        \forall i \in S, \quad [t_i, t_i + D_i - 1] \cap B_{lunch} = \emptyset
+    \end{equation}
+
+    \item \textbf{L-T-P ``Chunking'' (The 2+1 Rule):} For core courses with $L \ge 2$ credits, the algorithm mathematically forces the contact hours into a contiguous 2-hour block and subsequent 1-hour blocks, distributed across distinct days. Let $\mathcal{L}_c$ be the set of lecture sessions for subject $c$:
+    \begin{equation}
+        \exists! k \in \mathcal{L}_c : D_k = 2 \quad \text{and} \quad \forall j \in \mathcal{L}_c \setminus \{k\}, D_j = 1
+    \end{equation}
+    \begin{equation}
+        \forall i, j \in \mathcal{L}_c, \ i \neq j \implies d_i \neq d_j
+    \end{equation}
+\end{itemize}
+
+\begin{table}[htbp]
+\centering
+\caption{Hard Constraints Enforced by the Solver}
+\label{tab:hard_constraints}
+\renewcommand{\arraystretch}{1.4}
+\begin{tabularx}{\textwidth}{@{} c l X @{}}
+\toprule
+\textbf{\#} & \textbf{Constraint Name} & \textbf{Description} \\
+\midrule
+1 & Time Boundary & A session must not extend beyond slot 8 (18:30). \\
+2 & Break/Lunch Crossing & A multi-slot session must not span across a break boundary (slots 2$\to$3 or 4$\to$5). \\
+3 & Room Non-Overlap & At most one session may occupy a given room at any (day, slot). \\
+4 & Professor Non-Overlap & A professor can teach at most one session at any given slot. No elective exemption. \\
+5 & Group Non-Overlap & A student group can attend at most one session per slot. Elective--elective pairs and same-basket pairs are exempt. \\
+6 & Elective Basket Sync & Synced baskets (HSMC, MDM) must share the same (day, slot). No two different baskets may share a slot (global anti-clash). \\
+7 & Lab Room & Practical sessions must be assigned to rooms with type ``Lab''. \\
+8 & WMC-Section Overlap & A whole-batch (WMC) session cannot occupy the same slot as any section-level session. \\
+9 & Home Room & Core lectures and tutorials must be placed in their assigned home room. \\
+10 & 2+1 Lecture Format & The double-lecture block and single-lectures for the same subject+group must be on different days. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Soft Constraints (The Quality Space)}
+
+Once the solution space is feasible, the engine optimizes for schedule quality by minimizing soft penalties.
+
+\begin{itemize}
+    \item \textbf{Minimizing Student Gaps:} The engine minimizes idle slots between a cohort's first and last class on any given day. Let $\mathcal{T}_{g,d}$ be the set of all active time slots for student group $g$ on day $d$. The gap penalty $G(S)$ is:
+    \begin{equation}
+        G(S) = \sum_{g} \sum_{d} \left( (\max(\mathcal{T}_{g,d}) - \min(\mathcal{T}_{g,d}) + 1) - |\mathcal{T}_{g,d}| \right)
+    \end{equation}
+
+    \item \textbf{Room Capacity Optimization:} The system matches class enrollment $c_i$ to room capacity $K_{r_i}$. Let the utilization ratio be $u_i = c_i / K_{r_i}$. Given optimal thresholds $\alpha = 0.6$ and $\beta = 1.2$, the room utilization penalty $R(S)$ is formulated as:
+    \begin{equation}
+        R(S) = \sum_{i} \left( \max(0, \alpha - u_i) + \max(0, u_i - \beta) \right)
+    \end{equation}
+\end{itemize}
+
+\section{The (1+1) Evolution Strategy Solver}
+
+The optimization engine is powered by a (1+1) Evolution Strategy (ES) algorithm. It relies on iterative stochastic perturbations and adaptive mutation rates to navigate the constrained schedule space.
+
+\subsection{Strict Elitism}
+
+The algorithm employs a strictly elitist selection mechanism. In each generation, a parent solution $S_{parent}$ undergoes mutation to produce a single offspring $S_{child}$. The offspring replaces the parent if and only if its total fitness score is less than or equal to the parent's score:
+\begin{equation}
+    S_{parent}^{(t+1)} = \begin{cases} 
+      S_{child} & \text{if } f(S_{child}) \le f(S_{parent}^{(t)}) \\
+      S_{parent}^{(t)} & \text{otherwise}
+   \end{cases}
+\end{equation}
+This greediness guarantees that the solver never loses ground on hard constraint feasibility.
+
+\subsection{Mutation Operators}
+
+To generate $S_{child}$, the engine selects a subset of mutable sessions and applies highly stochastic operators:
+\begin{itemize}
+    \item \textbf{Gaussian Time Shifts:} The start time $t_i$ is perturbed using Gaussian noise scaled by variance $\sigma$:
+    \begin{equation}
+        t_i^{(new)} = t_i + \lfloor \mathcal{N}(0, \sigma^2) \rceil
+    \end{equation}
+    \item \textbf{Type-Aware Room Reassignments:} A session is moved to a randomly selected room $r_k \in \mathcal{R}$ that strictly matches its required architectural type (e.g., Lab vs. Lecture Hall).
+    \item \textbf{Targeted Swaps:} Two sessions $i$ and $j$ of identical duration exchange their spatial-temporal coordinates, effectively jumping out of local minima without increasing the overall density.
+\end{itemize}
+
+\subsection{Adaptive Variance (The Brain)}
+
+To dynamically balance global exploration and local exploitation, the solver implements Rechenberg's 1/5th Success Rule. The mutation strength $\sigma$ is adapted every $W = 50$ generations based on the success rate $p_s$ (the ratio of offspring that successfully improved or matched fitness).
+\begin{equation}
+    \sigma \leftarrow
+    \begin{cases}
+        \sigma \times 1.22 & \text{if } p_s > 0.20 \quad \text{(Search wider)} \\
+        \sigma \times 0.82 & \text{if } p_s < 0.20 \quad \text{(Search finer)} \\
+        \sigma & \text{otherwise}
+    \end{cases}
+\end{equation}
+
+\subsection{Stagnation Recovery}
+
+In highly dense optimization landscapes, the algorithm may converge to a deep local optimum (a plateau). The engine mathematically tracks this stagnation. If $S_{parent}$ fails to improve for 15,000 consecutive generations, a stagnation recovery protocol is triggered. The current candidate is discarded, and maximum entropy is injected by generating a completely new randomized initial timetable.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    node distance=1.1cm,
+    start/.style={draw, circle, fill=black, minimum size=6pt, inner sep=0pt},
+    stop/.style={draw, circle, fill=black, minimum size=6pt, inner sep=0pt, double, double distance=1.5pt},
+    action/.style={draw, rectangle, fill=blue!8, rounded corners=3pt, text width=6cm, align=center, font=\sffamily\scriptsize, minimum height=0.6cm},
+    decision/.style={draw, diamond, aspect=2.5, fill=orange!10, text width=1.8cm, align=center, font=\sffamily\scriptsize, inner sep=1pt},
+    arrow/.style={draw, thick, ->, >=stealth, font=\sffamily\tiny}
+]
+
+\node[start] (s) {};
+\node[action, below=of s] (init) {Generate Initial Solution\\(round-robin day, break-aware slot)};
+\node[action, below=of init] (seed) {Apply Seed \& Pin Locked Genes};
+\node[action, below=of seed] (mutate) {Mutate Parent $\to$ Offspring\\(3--8\% of mutable sessions)};
+\node[action, below=of mutate] (eval) {Evaluate Offspring Fitness $f(S')$};
+\node[decision, below=of eval] (accept) {$f(S') \leq f(S)$\,?};
+\node[action, below left=1.2cm and 0.3cm of accept] (yes) {Accept Offspring\\Update Best Solution};
+\node[decision, below=2.2cm of accept] (sigma) {gen \% $W$ == 0\,?};
+\node[action, right=2.2cm of sigma] (adapt) {Adapt $\sigma$ via\\1/5th Success Rule};
+\node[decision, below=of sigma] (stag) {Stagnation\,?};
+\node[action, right=2.2cm of stag] (restart) {Restart: New\\Random Solution};
+\node[decision, below=of stag] (term) {Done\,?};
+\node[stop, below=0.8cm of term] (e) {};
+
+\draw[arrow] (s) -- (init);
+\draw[arrow] (init) -- (seed);
+\draw[arrow] (seed) -- (mutate);
+\draw[arrow] (mutate) -- (eval);
+\draw[arrow] (eval) -- (accept);
+\draw[arrow] (accept) -- node[left] {Yes} (yes);
+\draw[arrow] (accept.east) -- ++(1.5,0) node[above left, font=\sffamily\tiny] {No} |- (sigma);
+\draw[arrow] (yes) |- (sigma);
+\draw[arrow] (sigma) -- node[above] {Yes} (adapt);
+\draw[arrow] (sigma) -- node[left] {No} (stag);
+\draw[arrow] (adapt) |- (stag);
+\draw[arrow] (stag) -- node[above] {Yes} (restart);
+\draw[arrow] (stag) -- node[left] {No} (term);
+\draw[arrow] (restart) |- (mutate);
+\draw[arrow] (term.west) -- ++(-2.5,0) node[above right, font=\sffamily\tiny] {No} |- (mutate);
+\draw[arrow] (term) -- node[right] {Yes} (e);
+
+\end{tikzpicture}
+\caption{Activity Diagram: (1+1)-ES Solver Execution Flow}
+\label{fig:solver_activity}
+\end{figure}
+
+\section{Interactive Editor \& Large Neighbourhood Search (LNS)}
+
+The user interface functions primarily as an engineering tool designed for granular control over the algorithmic output. When manual drag-and-drop actions introduce systemic conflicts, an integrated Large Neighbourhood Search (LNS) is deployed to repair the grid.
+
+The ``Auto-Fix'' feature applies a destroy-and-repair heuristic. Instead of recalculating the entire grid, it isolates the localized clashing subset $C \subseteq S$. The LNS algorithm iterates up to 1,500 times, randomly selecting a session $i \in C$, applying stochastic mutations (relocation, time shifts, or swaps), and evaluating the local differential fitness. If a localized mutation resolves the clash without violating surrounding sessions, the repair is committed.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    node distance=1.1cm,
+    start/.style={draw, circle, fill=black, minimum size=6pt, inner sep=0pt},
+    stop/.style={draw, circle, fill=black, minimum size=6pt, inner sep=0pt, double, double distance=1.5pt},
+    action/.style={draw, rectangle, fill=green!8, rounded corners=3pt, text width=5.5cm, align=center, font=\sffamily\scriptsize, minimum height=0.6cm},
+    decision/.style={draw, diamond, aspect=2.5, fill=orange!10, text width=2cm, align=center, font=\sffamily\scriptsize, inner sep=1pt},
+    arrow/.style={draw, thick, ->, >=stealth, font=\sffamily\tiny}
+]
+
+\node[start] (s) {};
+\node[action, below=of s] (find) {Identify Clashing Set\\(all sessions with hard violations)};
+\node[decision, below=of find] (empty) {Clashing set\\empty?};
+\node[action, below=1.2cm of empty] (pick) {Pick random session from clashing set};
+\node[action, below=of pick] (mut) {Apply random mutation\\(relocate / time shift / room swap)};
+\node[action, below=of mut] (ev) {Evaluate candidate fitness};
+\node[decision, below=of ev] (better) {Improved?};
+\node[action, below left=1cm and 0cm of better] (acc) {Accept candidate\\Refresh clashing set};
+\node[decision, below=2cm of better] (maxiter) {Max attempts\\reached?};
+\node[stop, right=2cm of empty] (done1) {};
+\node[stop, below=0.8cm of maxiter] (done2) {};
+
+\draw[arrow] (s) -- (find);
+\draw[arrow] (find) -- (empty);
+\draw[arrow] (empty) -- node[right] {No} (pick);
+\draw[arrow] (empty) -- node[above] {Yes (feasible)} (done1);
+\draw[arrow] (pick) -- (mut);
+\draw[arrow] (mut) -- (ev);
+\draw[arrow] (ev) -- (better);
+\draw[arrow] (better) -- node[left] {Yes} (acc);
+\draw[arrow] (better.east) -- ++(1.5,0) node[above left, font=\sffamily\tiny] {No} |- (maxiter);
+\draw[arrow] (acc) |- (maxiter);
+\draw[arrow] (maxiter) -- node[right] {Yes} (done2);
+\draw[arrow] (maxiter.west) -- ++(-2,0) node[above right, font=\sffamily\tiny] {No} |- (pick);
+
+\end{tikzpicture}
+\caption{Activity Diagram: LNS Destroy-and-Repair Auto-Fix}
+\label{fig:lns_activity}
+\end{figure}
+
+\section{Results and Application Features}
+
+The implementation of the optimization engine drastically reduces the administrative overhead. By executing entirely client-side, the system achieves feasibility rapidly, circumventing backend server latencies.
+
+\subsection{Algorithmic Convergence}
+
+The solver demonstrates rapid convergence. The heavily weighted hard penalties force the evolution strategy to prioritize feasibility before aggressively optimizing the soft quality metrics.
+
+`[Insert Image: Fitness Score vs. Generations Graph]`
+
+\subsection{The Interactive Drag-and-Drop Grid}
+
+The primary workspace visualizes the temporal matrix. It calculates multi-dimensional clashes in real-time, surfacing spatial and temporal overlaps through distinct programmatic warnings.
+
+`[Insert Image: Main UI Grid showing Clashes]`
+
+\subsection{LNS Auto-Fix Execution}
+
+When administrators execute the LNS repair routine, the interface explicitly highlights the target neighbourhood and dynamically resolves overlapping nodes without destabilizing the optimized framework.
+
+`[Insert Image: UI highlighting Auto-Fix suggestions]`
+
+\subsection{Export and PDF Generation}
+
+The final scheduling matrix is programmatically serialized into a high-fidelity PDF, leveraging DOM capture logic to bypass CSS layout constraints, ensuring the complete multidimensional array is rendered cleanly.
+
+`[Insert Image: Final PDF Timetable Output]`
 
 %-----------------------------------
 \section{Dynamic Time Grid Generation}
@@ -167,7 +494,7 @@ To bridge the gap between the digital system and offline requirements, the platf
 Users can generate PDFs of their current view. This relies on the `html-to-image` library to capture the DOM state as a PNG, which is then embedded into a `jsPDF` document. A significant technical hurdle overcome during implementation was the handling of sticky CSS headers; the capture logic temporarily disables `position: sticky` properties on the DOM elements right before capture to ensure the entire scrollable area is rendered to the image buffer accurately.
 
 \subsection{Google Sheets API Export}
-The `RoomTimetableViewer` and `FreeRoomViewer` support bulk export directly to Google Sheets. Using the Google Identity Services client, the React application constructs a multi-layered batch update request. This request not only writes the raw string data into the cells but explicitly formats the workbook—creating separate worksheets for different rooms, freezing header rows, applying pink and gray background colors to headers, and drawing solid borders—resulting in a highly professional, ready-to-share document directly in the administrator's Google Drive.
+The `RoomTimetableViewer` and `FreeRoomViewer` support bulk export directly to Google Sheets. Using the Google Identity Services client, the React application constructs a multi-layered batch update request. This request not only writes the raw string data into the cells but explicitly formats the workbookΓÇöcreating separate worksheets for different rooms, freezing header rows, applying pink and gray background colors to headers, and drawing solid bordersΓÇöresulting in a highly professional, ready-to-share document directly in the administrator's Google Drive.
 
 \subsection{User Interface Evaluation}
 The resulting application is a highly responsive, modern interface. By utilizing Tailwind CSS, the application maintains a clean, minimalist aesthetic with clear color coding (e.g., orange for practicals, green for tutorials). The elimination of page reloads between views, combined with the instantaneous clash detection, represents a monumental upgrade in usability and efficiency compared to traditional spreadsheet workflows.
@@ -178,195 +505,7 @@ The resulting application is a highly responsive, modern interface. By utilizing
 %-----------------------------------
 %-----------------------------------
 
-\section{The (1+1)-ES Timetable Solver}
-\label{sec:solver}
 
-The automated timetable generator is the centrepiece of this project. We use a (1+1) Evolution Strategy (ES)~\cite{rechenberg1973evolution,schwefel1995evolution}---a simple but effective meta-heuristic---to search for conflict-free schedules. In the subsections that follow, we formalise the problem representation, describe how we score candidates, and explain the mutation and adaptation mechanisms that drive the search.
-
-\subsection{Chromosome Representation}
-
-The solver models a complete timetable as a \textbf{Solution}, which is an ordered array of \textbf{Gene} objects. Each Gene $g_i$ encodes the scheduling decision for the $i$-th class session and is defined as:
-
-\begin{equation}
-    g_i = (\text{day}_i, \text{startBucket}_i, \text{roomIndex}_i)
-\end{equation}
-
-\noindent where:
-\begin{itemize}
-    \item $\text{day}_i \in \{1, 2, 3, 4, 5\}$ corresponds to Monday through Friday.
-    \item $\text{startBucket}_i \in \{1, 2, \dots, 8\}$ is the starting time slot (each slot represents one hour, from 08:50 to 18:30).
-    \item $\text{roomIndex}_i$ is the index into the available room array.
-\end{itemize}
-
-Each class session is represented by a \texttt{ClassSession} object containing immutable metadata: the subject identifier, student group, assigned professor, session duration, slot type (Lecture, Tutorial, or Practical), home room index, elective basket membership, and a locked flag indicating whether the session belongs to a previously published timetable.
-
-\subsection{Session Expansion: The 2+1 Lecture Format}
-
-Before solving, the \texttt{dataPrep.ts} module transforms high-level subject configurations (L-T-P counts) into individual \texttt{ClassSession} entries. A key institutional rule is the \textbf{2+1 lecture format}: for core subjects with $L \geq 2$ lectures per week, the system creates:
-\begin{itemize}
-    \item Exactly \textbf{one} double-lecture block of duration 2 hours (\texttt{lecturePairIndex = 0}).
-    \item The remaining $L - 2$ lectures as individual 1-hour sessions (\texttt{lecturePairIndex = -1}).
-\end{itemize}
-
-This is enforced as a hard constraint: the double-lecture and all single-lectures for the same subject and group must be placed on \emph{different} days.
-
-\subsection{Fitness Function}
-
-The quality of a candidate solution $S$ is evaluated by a composite fitness function:
-
-\begin{equation}
-    f(S) = H(S) \cdot W_{\text{hard}} + G(S) \cdot W_{\text{gap}} + R(S) \cdot W_{\text{room}} + P(S) \cdot W_{\text{prof}}
-\end{equation}
-
-\noindent where:
-\begin{itemize}
-    \item $H(S)$ is the total number of hard constraint violations.
-    \item $G(S)$ is the student schedule gap penalty (soft).
-    \item $R(S)$ is the room utilization penalty (soft).
-    \item $P(S)$ is the professor same-half penalty (soft).
-    \item $W_{\text{hard}} = 1000$, $W_{\text{gap}} = 1.0$, $W_{\text{room}} = 0.8$, $W_{\text{prof}} = 5.0$ are configurable weights.
-\end{itemize}
-
-The large hard penalty weight ($W_{\text{hard}} = 1000$) ensures that the solver prioritizes eliminating all hard violations before optimizing soft constraints. A feasible solution has $H(S) = 0$.
-
-\subsection{Hard Constraints}
-
-The system enforces ten hard constraints, summarized in Table~\ref{tab:hard_constraints}.
-
-\begin{table}[htbp]
-\centering
-\caption{Hard Constraints Enforced by the Solver}
-\label{tab:hard_constraints}
-\renewcommand{\arraystretch}{1.4}
-\begin{tabularx}{\textwidth}{@{} c l X @{}}
-\toprule
-\textbf{\#} & \textbf{Constraint Name} & \textbf{Description} \\
-\midrule
-1 & Time Boundary & A session must not extend beyond slot 8 (18:30). \\
-2 & Break/Lunch Crossing & A multi-slot session must not span across a break boundary (slots 2$\to$3 or 4$\to$5). \\
-3 & Room Non-Overlap & At most one session may occupy a given room at any (day, slot). \\
-4 & Professor Non-Overlap & A professor can teach at most one session at any given slot. No elective exemption. \\
-5 & Group Non-Overlap & A student group can attend at most one session per slot. Elective--elective pairs and same-basket pairs are exempt. \\
-6 & Elective Basket Sync & Synced baskets (HSMC, MDM) must share the same (day, slot). No two different baskets may share a slot (global anti-clash). \\
-7 & Lab Room & Practical sessions must be assigned to rooms with type ``Lab''. \\
-8 & WMC-Section Overlap & A whole-batch (WMC) session cannot occupy the same slot as any section-level session. \\
-9 & Home Room & Core lectures and tutorials must be placed in their assigned home room. \\
-10 & 2+1 Lecture Format & The double-lecture block and single-lectures for the same subject+group must be on different days. \\
-\bottomrule
-\end{tabularx}
-\end{table}
-
-\subsection{Soft Constraints}
-
-Three soft constraints provide schedule quality optimization beyond feasibility:
-
-\begin{enumerate}
-    \item \textbf{Student Gap Penalty $G(S)$:} For each student group on each day, the penalty counts empty slots between their first and last scheduled class. Formally, if a group occupies a set of slots $\mathcal{S}_d$ on day $d$, the gap is $(\max(\mathcal{S}_d) - \min(\mathcal{S}_d) + 1) - |\mathcal{S}_d|$.
-
-    \item \textbf{Room Utilization Penalty $R(S)$:} For practical and elective sessions, the solver computes the utilization ratio $u = \text{studentCount} / \text{roomCapacity}$. If $u < 0.60$ (under-utilization) or $u > 1.20$ (over-utilization), a proportional penalty is applied. The result is scaled to an integer range by multiplying by 100.
-
-    \item \textbf{Professor Same-Half Penalty $P(S)$:} For each professor on each day, a penalty of 1 is incurred if they teach in both the morning half (slots 1--4) and the afternoon half (slots 5--8). This encourages compact teaching schedules.
-\end{enumerate}
-
-\subsection{Mutation Operators}
-
-The (1+1)-ES generates offspring by applying a small number of mutations to the parent solution. Each generation, the solver randomly selects 3--8\% of mutable (non-locked) sessions and applies one of five mutation operators:
-
-\begin{enumerate}
-    \item \textbf{Day Reassignment:} Assigns a uniformly random new day $d \in \{1, \dots, 5\}$.
-    \item \textbf{Gaussian Time Shift:} Perturbs the start slot by $\Delta = \lfloor \mathcal{N}(0, \sigma^2) \rceil$, clamped to valid bounds. If the new position crosses a break boundary, the slot is snapped to the nearest valid start using a precomputed cache.
-    \item \textbf{Type-Aware Room Reassignment:} Assigns a random room respecting the session type: Lab rooms for practicals, lecture rooms for electives, and the fixed home room for core lectures/tutorials.
-    \item \textbf{Swap:} Exchanges the (day, slot, room) of two same-duration sessions. Synced-basket electives are excluded from swapping to preserve group synchronization.
-    \item \textbf{Full Relocate:} Assigns a completely new random (day, slot, room) triple.
-\end{enumerate}
-
-For synced-basket electives (HSMC, MDM), mutations to day, time, or relocation are \emph{propagated} to all members of the sync group, ensuring they remain synchronized.
-
-\subsection{$\sigma$-Adaptation: The 1/5th Success Rule}
-
-The step-size parameter $\sigma$ controls the magnitude of Gaussian time perturbations. The solver adapts $\sigma$ using Rechenberg's 1/5th success rule~\cite{rechenberg1973evolution}. Every $W = 50$ generations (the adaptation window), the success rate $p_s$ (fraction of offspring that improved fitness) is computed:
-
-\begin{equation}
-    \sigma \leftarrow
-    \begin{cases}
-        \sigma \times 1.22 & \text{if } p_s > 1/5 \quad \text{(too many successes $\Rightarrow$ increase exploration)} \\
-        \sigma \times 0.82 & \text{if } p_s < 1/5 \quad \text{(too few successes $\Rightarrow$ decrease step size)} \\
-        \sigma & \text{otherwise}
-    \end{cases}
-\end{equation}
-
-This adaptive mechanism balances exploration (large jumps in the search space) and exploitation (fine-tuning near a local optimum).
-
-\subsection{Stagnation Restart}
-
-If the best fitness does not improve for a configurable number of consecutive generations (the stagnation threshold, typically 25\% of total generations), the solver performs a \textbf{restart}: the current solution is discarded and a fresh random initial solution is generated. The best-ever solution is preserved across restarts via elitist tracking.
-
-\subsection{Locked Sessions and Cross-Semester Awareness}
-
-When generating a timetable for a specific semester, the solver can incorporate \textbf{locked sessions} from previously published timetables of other semesters. These locked sessions are appended to the session array with their \texttt{isLocked} flag set to \texttt{true}. Their Gene positions are fixed and never mutated. However, they participate fully in constraint evaluation---particularly room overlap and professor overlap checks---ensuring that the new timetable does not conflict with existing published schedules.
-
-\subsection{Solver Execution Flow}
-
-The solver runs asynchronously in the browser using batched \texttt{setTimeout} calls (processing 200 generations per batch) to maintain UI responsiveness. The overall flow is:
-\begin{enumerate}
-    \item Generate an initial solution using round-robin day assignment and break-aware slot placement.
-    \item If a seed timetable is provided, override matched sessions with their existing positions.
-    \item Pin locked genes from published timetables.
-    \item For each generation: mutate the parent, evaluate the offspring, accept if $f(\text{offspring}) \leq f(\text{parent})$ (elitist selection).
-    \item Every $W$ generations, adapt $\sigma$ via the 1/5th rule.
-    \item If stagnation is detected, restart with a fresh random solution.
-    \item Report progress (current fitness, $\sigma$, success rate, violation breakdown) to the UI at configurable intervals.
-    \item Terminate on reaching the maximum generation count, achieving zero hard violations, or user cancellation.
-\end{enumerate}
-
-Figure~\ref{fig:solver_activity} visualizes this execution flow as a UML activity diagram.
-
-\begin{figure}[htbp]
-\centering
-\begin{tikzpicture}[
-    node distance=1.1cm,
-    start/.style={draw, circle, fill=black, minimum size=6pt, inner sep=0pt},
-    stop/.style={draw, circle, fill=black, minimum size=6pt, inner sep=0pt, double, double distance=1.5pt},
-    action/.style={draw, rectangle, fill=blue!8, rounded corners=3pt, text width=6cm, align=center, font=\sffamily\scriptsize, minimum height=0.6cm},
-    decision/.style={draw, diamond, aspect=2.5, fill=orange!10, text width=1.8cm, align=center, font=\sffamily\scriptsize, inner sep=1pt},
-    arrow/.style={draw, thick, ->, >=stealth, font=\sffamily\tiny}
-]
-
-\node[start] (s) {};
-\node[action, below=of s] (init) {Generate Initial Solution\\(round-robin day, break-aware slot)};
-\node[action, below=of init] (seed) {Apply Seed \& Pin Locked Genes};
-\node[action, below=of seed] (mutate) {Mutate Parent $\to$ Offspring\\(3--8\% of mutable sessions)};
-\node[action, below=of mutate] (eval) {Evaluate Offspring Fitness $f(S')$};
-\node[decision, below=of eval] (accept) {$f(S') \leq f(S)$\,?};
-\node[action, below left=1.2cm and 0.3cm of accept] (yes) {Accept Offspring\\Update Best Solution};
-\node[decision, below=2.2cm of accept] (sigma) {gen \% $W$ == 0\,?};
-\node[action, right=2.2cm of sigma] (adapt) {Adapt $\sigma$ via\\1/5th Success Rule};
-\node[decision, below=of sigma] (stag) {Stagnation\,?};
-\node[action, right=2.2cm of stag] (restart) {Restart: New\\Random Solution};
-\node[decision, below=of stag] (term) {Done\,?};
-\node[stop, below=0.8cm of term] (e) {};
-
-\draw[arrow] (s) -- (init);
-\draw[arrow] (init) -- (seed);
-\draw[arrow] (seed) -- (mutate);
-\draw[arrow] (mutate) -- (eval);
-\draw[arrow] (eval) -- (accept);
-\draw[arrow] (accept) -- node[left] {Yes} (yes);
-\draw[arrow] (accept.east) -- ++(1.5,0) node[above left, font=\sffamily\tiny] {No} |- (sigma);
-\draw[arrow] (yes) |- (sigma);
-\draw[arrow] (sigma) -- node[above] {Yes} (adapt);
-\draw[arrow] (sigma) -- node[left] {No} (stag);
-\draw[arrow] (adapt) |- (stag);
-\draw[arrow] (stag) -- node[above] {Yes} (restart);
-\draw[arrow] (stag) -- node[left] {No} (term);
-\draw[arrow] (restart) |- (mutate);
-\draw[arrow] (term.west) -- ++(-2.5,0) node[above right, font=\sffamily\tiny] {No} |- (mutate);
-\draw[arrow] (term) -- node[right] {Yes} (e);
-
-\end{tikzpicture}
-\caption{Activity Diagram: (1+1)-ES Solver Execution Flow}
-\label{fig:solver_activity}
-\end{figure}
 
 %-----------------------------------
 \section{The Interactive Timetable Editor}
@@ -447,112 +586,3 @@ The LNS targets only the problematic sessions rather than reoptimizing the entir
 \label{fig:lns_activity}
 \end{figure}
 
-\subsection{Master View}
-
-The editor includes a ``Master View'' toggle that fetches and overlays all slots from other published timetables as read-only, semi-transparent cards in the grid. This provides cross-semester situational awareness, allowing the administrator to visually verify that no room or professor conflicts exist between the current draft and previously published schedules.
-
-%-----------------------------------
-\section{The Intelligent Generator}
-\label{sec:generator}
-
-The \texttt{GeneratorView} component is the front door to the solver. It walks administrators through a guided, step-by-step configuration process that collects all the information the solver needs before launching the optimisation.
-
-\subsection{Step 1: Cluster Selection}
-
-The administrator selects a \texttt{semester\_cluster} (e.g., ``IT, Sem 3, Batch 2023''). This scopes the scheduling problem by loading the associated subjects (with L-T-P configurations) and student groups (sections like Sec A--D, WMC, and IT-BI) from the database.
-
-\subsection{Step 2: Home Room Mapping}
-
-Each student group (section) is mapped to a home room. Home rooms follow IIITA's floor-based naming convention: \texttt{CC-3-5\{floor\}\{suffix\}}, where the floor digit is derived from the semester (semesters 1--2 $\to$ floor 0, semesters 3--4 $\to$ floor 1, semesters 5--6 $\to$ floor 2) and the suffix maps to the section letter (A$\to$06, B$\to$07, C$\to$54, D$\to$55). For example, Semester 3, Section B maps to room \texttt{CC-3-5107}. The wizard auto-applies this policy when a cluster is selected, falling back to round-robin assignment for any group that cannot be matched.
-
-\subsection{Step 3: Professor Assignment Matrix}
-
-An interactive matrix presents subjects as rows and student groups as columns. For each cell, the administrator selects a professor from a dropdown filtered by the \texttt{professor\_expertise} table. Each subject supports four scheduling modes:
-\begin{itemize}
-    \item \textbf{Sections:} Assigns individually to each section (A, B, C, D).
-    \item \textbf{All (WMC):} Assigns to the whole-batch ``WMC'' group (used for core lectures taught to all sections simultaneously).
-    \item \textbf{IT-BI:} Assigns only to the ``IT-BI'' group (for subjects exclusive to the IT-BI programme).
-    \item \textbf{Disabled:} Excludes the subject entirely from the solver.
-\end{itemize}
-
-An ``Auto-Fill'' button populates all unset cells using round-robin professor assignment from the expertise pool.
-
-\subsection{Step 4: Seed and Lock Configuration}
-
-Before launching the solver, the administrator may optionally:
-\begin{itemize}
-    \item Select a \textbf{seed timetable} to warm-start the solver from an existing schedule rather than a random initial solution.
-    \item Select one or more \textbf{locked timetables} whose slots are injected as immutable constraints into the solver, enabling cross-semester conflict avoidance.
-\end{itemize}
-
-\subsection{Step 5: Solver Execution and Results}
-
-Upon clicking ``Generate Timetable,'' the system constructs the \texttt{SolverInput}, launches the (1+1)-ES solver, and displays a real-time progress card showing: current generation, best fitness, $\sigma$, success rate, and the violation breakdown. Upon completion, a results panel displays the final fitness and provides options to:
-\begin{itemize}
-    \item Save the generated timetable to the database as a new draft.
-    \item Transition directly to the \texttt{EditorView} for manual refinement.
-    \item Download a comprehensive diagnostic log file.
-\end{itemize}
-
-\subsection{End-to-End Sequence Diagram}
-
-Figure~\ref{fig:generator_sequence} illustrates the complete interaction sequence between the administrator, the Intelligent Generator UI, the database, and the solver engine during an automated timetable generation session.
-
-\begin{figure}[htbp]
-\centering
-\resizebox{\textwidth}{!}{%
-\begin{tikzpicture}[
-    actor/.style={rectangle, draw, fill=blue!10, text width=1.8cm, align=center, font=\sffamily\scriptsize, minimum height=0.7cm, rounded corners=2pt},
-    lifeline/.style={dashed, gray},
-    msg/.style={->, >=stealth, thick, font=\sffamily\tiny},
-    rmsg/.style={->, >=stealth, thick, dashed, font=\sffamily\tiny},
-    activation/.style={fill=blue!8, draw, minimum width=0.3cm},
-    note/.style={rectangle, draw, fill=yellow!10, text width=3cm, align=left, font=\sffamily\tiny, rounded corners}
-]
-
-% Actors
-\node[actor] (admin) at (0,0) {\textbf{Admin}};
-\node[actor] (gen) at (3.5,0) {\textbf{Generator\\View}};
-\node[actor] (db) at (7,0) {\textbf{Supabase\\DB}};
-\node[actor] (prep) at (10.5,0) {\textbf{dataPrep}};
-\node[actor] (solver) at (14,0) {\textbf{Solver\\Engine}};
-
-% Lifelines
-\foreach \x in {admin, gen, db, prep, solver} {
-    \draw[lifeline] (\x.south) -- ++(0,-14);
-}
-
-% Messages
-\draw[msg] (0,-1.2) -- node[above] {1. Select Cluster} (3.5,-1.2);
-\draw[msg] (3.5,-1.8) -- node[above] {2. Fetch subjects, groups} (7,-1.8);
-\draw[rmsg] (7,-2.4) -- node[above] {3. Return cluster data} (3.5,-2.4);
-
-\draw[msg] (0,-3.2) -- node[above] {4. Map rooms, assign profs} (3.5,-3.2);
-
-\draw[msg] (0,-4.0) -- node[above] {5. Configure seed \& locks} (3.5,-4.0);
-\draw[msg] (3.5,-4.6) -- node[above] {6. Fetch locked slots} (7,-4.6);
-\draw[rmsg] (7,-5.2) -- node[above] {7. Return locked sessions} (3.5,-5.2);
-
-\draw[msg] (0,-6.0) -- node[above] {8. Click ``Generate''} (3.5,-6.0);
-\draw[msg] (3.5,-6.6) -- node[above] {9. prepareSolverInput()} (10.5,-6.6);
-\draw[rmsg] (10.5,-7.2) -- node[above] {10. SolverInput bundle} (3.5,-7.2);
-
-\draw[msg] (3.5,-7.8) -- node[above] {11. runSolver(input)} (14,-7.8);
-
-% Solver loop
-\draw[msg] (14,-8.6) -- node[above] {12. onProgress()} (3.5,-8.6);
-\node[note, right=0.3cm of solver, yshift=-9cm] (loop) {Repeats every\\reportInterval\\generations};
-\draw[rmsg] (14,-9.4) -- node[above] {13. onProgress()} (3.5,-9.4);
-
-\draw[rmsg] (14,-10.4) -- node[above] {14. SolverResult} (3.5,-10.4);
-
-\draw[msg] (0,-11.2) -- node[above] {15. Click ``Save''} (3.5,-11.2);
-\draw[msg] (3.5,-11.8) -- node[above] {16. INSERT timetable + slots} (7,-11.8);
-\draw[rmsg] (7,-12.4) -- node[above] {17. Confirm saved} (3.5,-12.4);
-\draw[rmsg] (3.5,-13.0) -- node[above] {18. Navigate to EditorView} (0,-13.0);
-
-\end{tikzpicture}
-}%
-\caption{Sequence Diagram: End-to-End Intelligent Generator Workflow}
-\label{fig:generator_sequence}
-\end{figure}

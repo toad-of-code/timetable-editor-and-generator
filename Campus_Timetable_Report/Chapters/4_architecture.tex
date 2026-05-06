@@ -6,7 +6,7 @@
 
 %----------------------------------------------------------------------------------------
 
-This chapter details the structural design of the IIITA Timetabling System. It defines the application topology, the relational database schema, the Excel data ingestion pipeline, the solver's internal data model, and the state-based routing logic used for view management.
+This chapter details the structural design of the IIITA Timetabling System. It defines the application topology, the relational database schema, the solver's internal data model, the asynchronous processing design for non-blocking execution, the Excel data ingestion pipeline, and the state-based routing logic used for view management.
 
 %-----------------------------------
 \section{Application Topology}
@@ -220,9 +220,21 @@ The solver engine works off a specific set of TypeScript interfaces which model 
 \end{figure}
 
 %-----------------------------------
+\section{Asynchronous Processing Design}
+
+To execute the (1+1)-ES solver without blocking the browser's single-threaded UI, the following strategy is used:
+
+\begin{itemize}
+    \item \textbf{Single-Threaded Execution:} Since JavaScript runs on a single main thread, a continuous (1+1)-ES loop would block UI updates and result in "unresponsive script" warnings.
+    \item \textbf{Asynchronous Batched Execution:} The solver partitions the optimization workload into discrete batches of generations, preventing the CPU from becoming an uninterruptible bottleneck.
+    \item \textbf{Event Loop Yielding:} After each batch, the system utilizes \texttt{setTimeout(..., 0)} to yield control back to the browser's event loop, allowing for essential tasks like input handling.
+    \item \textbf{UI Responsiveness:} This non-blocking design enables the application to render real-time fitness charts and maintain a fluid, interactive user experience throughout the optimization process.
+\end{itemize}
+
+%-----------------------------------
 The system includes a data ingestion module (\texttt{TimetableImporter}) to parse existing Excel-based timetables into the normalized database schema. The process follows a five-step pipeline:
 
-\begin{figure}[htbp]
+\begin{figure}[H]
 \centering
 \begin{tikzpicture}[
     node distance=1.2cm,

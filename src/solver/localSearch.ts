@@ -1,6 +1,6 @@
 import type { SolverInput, Solution, Gene, FitnessResult } from './types';
 import { evaluate } from './constraints';
-import { timeToSlot } from './constants';
+import { timeToSlot, isSyncedBasket } from './constants';
 import { mutateRelocate, mutateTime, mutateRoom } from './mutations';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -144,6 +144,20 @@ export function runLNS(
             };
         }
 
+        // --- Move Propagation for Synced Baskets (MDM, HSMC) ---
+        if (isSyncedBasket(session.basketName)) {
+            for (let i = 0; i < input.sessions.length; i++) {
+                const s = input.sessions[i];
+                if (i !== changedIndex && s.basketName === session.basketName && s.slotType === session.slotType && s.electiveSlotIndex === session.electiveSlotIndex) {
+                    candidate[i] = {
+                        ...candidate[i],
+                        day: candidate[changedIndex].day,
+                        startBucket: candidate[changedIndex].startBucket
+                    };
+                }
+            }
+        }
+
         const candidateFitness = evaluate(input, candidate);
 
         if (candidateFitness.total < bestFitness.total) {
@@ -283,7 +297,6 @@ function findClashingIndices(input: SolverInput, solution: Solution): Set<number
 
     // ── 6: Elective sync (synced basket disagreement + cross-basket slot clash) ─
     {
-        const SYNCED = new Set(['HSMC', 'MDM']);
         const basketGroups = new Map<string, number[]>();
         for (let i = 0; i < sessions.length; i++) {
             const s = sessions[i];
@@ -296,7 +309,7 @@ function findClashingIndices(input: SolverInput, solution: Solution): Set<number
         // Rule A: synced basket members must share (day, startBucket)
         for (const [groupKey, indices] of basketGroups.entries()) {
             const basketName = groupKey.split('|')[0];
-            if (!SYNCED.has(basketName) || indices.length <= 1) continue;
+            if (!isSyncedBasket(basketName) || indices.length <= 1) continue;
             const refDay = solution[indices[0]].day;
             const refStart = solution[indices[0]].startBucket;
             for (let k = 1; k < indices.length; k++) {
@@ -458,6 +471,21 @@ export function runFullLNS(
             // Just change room
             const newRoom = mutateRoom(session, input.rooms);
             candidate[idx] = { ...candidate[idx], roomIndex: newRoom.roomIndex };
+        }
+
+        // --- Move Propagation for Synced Baskets (MDM, HSMC) ---
+        if (isSyncedBasket(session.basketName)) {
+            const groupKey = `${session.basketName}|${session.slotType}|${session.electiveSlotIndex}`;
+            for (let i = 0; i < input.sessions.length; i++) {
+                const s = input.sessions[i];
+                if (i !== idx && s.basketName === session.basketName && s.slotType === session.slotType && s.electiveSlotIndex === session.electiveSlotIndex) {
+                    candidate[i] = {
+                        ...candidate[i],
+                        day: candidate[idx].day,
+                        startBucket: candidate[idx].startBucket
+                    };
+                }
+            }
         }
 
         const candidateFitness = evaluate(input, candidate);
