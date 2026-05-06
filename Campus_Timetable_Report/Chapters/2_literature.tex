@@ -6,19 +6,19 @@
 
 %----------------------------------------------------------------------------------------
 
-The challenge of creating conflict-free, optimal schedules for academic institutions has been a subject of extensive research for decades. This chapter reviews the existing literature surrounding the University Timetabling Problem (UTP), categorizes the various algorithmic approaches proposed by researchers, examines the evolution of software architectures used in timetable management systems, and identifies the gaps in existing solutions that this project seeks to address.
+It is not a new phenomenon that the problem of designing schedules that have no conflicts and that are perfect has received much attention through decades of research. This chapter summarizes the current literature on the UTP, categorizes the different types of algorithms developed by researchers for tackling the problem, and discusses the evolution of software architecture in the context of timetable management systems.
 
 %-----------------------------------
 \section{The University Timetabling Problem (UTP)}
 
-Academic timetabling is formally defined as the process of assigning a set of events (such as lectures, exams, or meetings) to a set of resources (such as time slots, rooms, and faculty members) subject to a multitude of constraints \cite{schaerf1999survey}. The complexity of this task is heavily dependent on the size of the institution, the flexibility of the curriculum, and the rigidity of the constraints. 
+Formally speaking, academic scheduling is referred to as the problem of allocating a collection of activities (like lectures, examinations, and meetings) to a collection of resources (time periods, rooms, and teaching staff) based on a variety of constraints \cite{schaerf1999survey}. It should be noted that the difficulty of such a task depends on many factors, such as the scale of the institution, the flexibility of the course structure, and the constraints' strictness.
 
 \subsection{Constraint Satisfaction and Complexity}
-In computational complexity theory, the University Timetabling Problem is generally classified as NP-hard \cite{even1975complexity}. This implies that as the number of variables (classes, rooms, professors) increases, the time required to find an optimal solution grows exponentially, making brute-force search algorithms entirely unfeasible for real-world applications.
+In computational complexity theory, the University Timetabling Problem is generally classified as NP-hard \cite{even1975complexity}. This means that when the number of variables (classes, rooms, teachers) increases, the time needed to solve the problem increases exponentially, making any exhaustive search algorithm totally impractical.
 
 Constraints within the UTP are universally divided into two categories:
 \begin{itemize}
-    \item \textbf{Hard Constraints:} These are non-negotiable conditions that must be satisfied for a timetable to be considered feasible. Examples include:
+    \item \textbf{Hard Constraints:} These are non-negotiable conditions that must be satisfied for a timetable to be considered feasible. Examples are:
     \begin{itemize}
         \item A room cannot host more than one class simultaneously.
         \item A professor cannot teach two different classes at the same time.
@@ -40,10 +40,10 @@ Constraints within the UTP are universally divided into two categories:
 Over the years, researchers have proposed a vast array of techniques to solve the UTP, ranging from classical mathematical modeling to modern meta-heuristic algorithms. 
 
 \subsection{Exact Methods}
-Early approaches focused on exact mathematical methods, primarily Integer Linear Programming (ILP) and Graph Coloring. In a Graph Coloring model, events are represented as nodes, and edges are drawn between events that conflict (e.g., they share the same student group or professor). The goal is to "color" the nodes—where each color represents a distinct time slot—using the minimum number of colors such that no two connected nodes share the same color \cite{de1985graph}. While theoretically sound, exact methods struggle significantly with the high dimensionality of real-world timetabling problems, often failing to find solutions within acceptable computation times when soft constraints are introduced.
+The earliest methods concerned at the mathematical level whether Integer Linear Programming (ILP) and Graph Coloring. In a Graph Coloring model, events are represented as nodes, and edges are drawn between events that conflict (e.g. share the same student group, professor).  The objective is to use the fewest possible colours to colour the nodes, where colours indicate distinct time slots, such that no two adjacent nodes are coloured the same colour. Although theoretically valid, exact approaches have significant difficulties due to the high dimension of real-life timetabling problems, which are often unable to find solutions in acceptable computation times when soft constraints are added.
 
 \subsection{Heuristic and Meta-Heuristic Algorithms}
-Due to the computational limitations of exact methods, the focus of the research community shifted heavily towards heuristic and meta-heuristic approaches in the late 1990s and 2000s. These methods do not guarantee finding the absolute optimal solution but are highly effective at finding "good enough" (feasible and high-quality) solutions within reasonable timeframes.
+Because exact methods could not deal with large-size problems, heuristics and meta-heuristics became a prominent focus of the scientific community during the late 1990s and 2000s. The methods do not guarantee the absolute best solution, but they are very good at finding “good enough” (feasible and high-quality) solutions in reasonable time.
 
 \begin{itemize}
     \item \textbf{Genetic Algorithms (GA):} Inspired by natural evolution, GAs represent potential timetables as "chromosomes." Through processes of selection, crossover (combining parts of two schedules), and mutation (randomly altering a scheduled event), populations of timetables evolve over generations to minimize constraint violations \cite{burke1996genetic}.
@@ -53,32 +53,32 @@ Due to the computational limitations of exact methods, the focus of the research
 %-----------------------------------
 \section{Evolution of Timetable Management Systems}
 
-While academic research has heavily focused on the mathematical generation of schedules, the practical software engineering aspects of timetable management—how the data is ingested, visualized, and distributed—have evolved significantly alongside broader trends in software development.
+Although a lot of work has been done by researchers to understand schedule generation mathematically, it cannot be ignored that software engineering for timetable management has advanced considerably, in tandem with advances made in software engineering as a whole.
 
 \subsection{Legacy Systems: Spreadsheets and Desktop Applications}
-Historically, timetables were drafted manually on large whiteboards or physical grids. With the advent of personal computing, spreadsheet software like Microsoft Excel became the defacto standard for academic coordinators. Excel offers a highly flexible, human-readable grid interface. However, as noted by numerous educational technologists, spreadsheets are fundamentally static. They lack the relational data models necessary to automatically enforce referential integrity or detect complex logical clashes without the use of fragile, custom-built macros (VBA scripts) \cite{panko1998what}. Furthermore, distributing an Excel file means distributing a static snapshot in time, leading to severe communication breakdowns when schedules inevitably change mid-semester.
+Timetables were traditionally hand-drawn on large whiteboards and grids. The rise of personal computing gave birth to spreadsheet programs such as Microsoft Excel, which became the standard in the academic world. Spreadsheets provide an immensely versatile user interface that is easy to read and understand. As observed by many educational technology experts, however, spreadsheets are inherently static in nature. They are unable to incorporate relational data models that would allow referential integrity enforcement and detection of logical inconsistencies without relying on error-prone, custom-built macros (e.g., Visual Basic for Applications) \cite{panko1998what}. The problem with sharing an Excel document is the static nature of its data.
 
-In response to the limitations of spreadsheets, institutional desktop applications were developed in the late 1990s and early 2000s using technologies like Java Swing or .NET WinForms. These systems introduced relational databases (like MySQL or Oracle) to store scheduling data, offering significantly better integrity than flat files. However, being desktop-bound, they still suffered from distribution issues. Stakeholders (students and faculty) typically could not interact directly with the system, relying instead on printed reports or static HTML exports generated by administrators.
+Desktop application solutions emerged in the late 1990s and early 2000s as a solution to the drawbacks associated with spreadsheet software. These systems incorporated relational database management systems such as MySQL or Oracle for storing schedule information, providing superior data integrity compared to flat file storage. Nevertheless, due to the desktop-centric nature of such applications, they also had the same distribution problems. The stakeholders involved, namely students and instructors, could not directly communicate with the software but had to resort to printed documents or HTML outputs produced by administrators.
 
-\subsection{Modern Web-Based Architectures}
-The shift towards cloud computing and modern web frameworks has revolutionized how institutions handle internal logistics. Modern systems utilize full-stack web architectures, allowing centralized data storage with ubiquitous access via web browsers.
+\subsection{Modern Web-Based Systems}
+Cloud computing and contemporary web frameworks have greatly influenced the way institutions manage their logistics through software systems. Modern systems employ full-stack web-based architectures, enabling the storage of data centrally while ensuring universal access using web browsers.
 
-The adoption of modern frontend frameworks like React, Angular, or Vue.js has enabled the creation of Highly Interactive Single Page Applications (SPAs). Unlike older web technologies that required full page reloads for every interaction, SPAs provide dynamic, fluid user experiences. This is particularly crucial for timetabling interfaces, where users need to rapidly switch between different views (e.g., moving from a "Room View" to a "Professor View") or apply complex filters (e.g., viewing only specific student sections) without latency.
+With the use of modern front end frameworks such as React, Angular, or Vue.js, highly interactive Single Page Applications (SPAs) have become possible. In contrast to legacy web applications that necessitated full-page refreshes every time an action is performed by a user, SPAs allow for highly fluid user interactions. This is especially important in the case of timetable interfaces since the user needs to be able to change views quickly, for example, switching from "Room view" to "Professor view" and filtering for particular criteria (e.g., only particular students' sections).
 
-Furthermore, the rise of Backend-as-a-Service (BaaS) platforms, such as Firebase or Supabase, has accelerated the development of such tools. By abstracting the complexities of server maintenance, database provisioning, and authentication, developers can focus more on the domain-specific logic—such as conflict detection algorithms or Excel parsing heuristics.
+In addition, Backend as a Service (BaaS) providers such as Firebase or Supabase have sped up this process considerably. BaaS platforms remove the burden of setting up servers, creating databases, and securing authentications which allows developers to focus on implementing functionality such as conflict detection and heuristic Excel parsers.
 
 %-----------------------------------
 \section{Identification of Gaps in Existing Solutions}
 
-Despite the proliferation of generic scheduling tools and complex academic research on constraint solving, a noticeable gap remains for many mid-to-large scale academic institutions, particularly in developing nations. 
+While there is an abundance of off-the-shelf schedulers and extensive academic literature on constraints-based scheduling, it seems that there is still a significant gap in many mid-size to large academic institutions, especially those based in developing countries.
 
-1. \textbf{The Ingestion Bottleneck:} Commercial systems often require data to be entered manually through their proprietary interfaces or imported using highly rigid CSV templates. Institutions that rely on complex, idiosyncratic Excel formats (with merged cells, color-coding, and embedded textual notes) find it extremely difficult to migrate their existing workflows into these rigid systems. There is a critical need for heuristic parsers capable of understanding "human-formatted" spreadsheets.
+1. \textbf{The Ingestion Barrier:} Most commercial software applications demand manual data entry via their interface or importing the data from rigidly defined CSV files. Any institution that maintains a more elaborate, unique Excel format (including merged cells, cell coloring, and embedded notes) will face major difficulties converting its current workflow to such a rigid system. There is an urgent need for heuristic parsers that can read "human-written" spreadsheets.
 
-2. \textbf{Lack of Integrated Occupancy Tracking:} Many timetabling systems focus solely on the student/faculty schedule output. They lack dedicated tools for campus administrators to view real-time infrastructure utilization. Features like a "Free Room Finder" or a macroscopic "Master Occupancy Grid" are rarely integrated seamlessly with the core scheduling engine.
+2. \textbf{Inadequate Building Occupancy Tools:} Most timetabling applications only produce the desired schedule output (student/faculty). However, no tools are available for campus managers to visualize building occupancy. A "Room Finder" utility or "Master Occupancy Map" is not typically offered as part of the core scheduling engine.
 
-3. \textbf{Disconnect Between Generation and Management:} Academic tools that generate perfect schedules using Genetic Algorithms often feature poor, academic user interfaces that are unusable by administrative staff. Conversely, polished commercial management systems often treat the schedule as a static entity to be displayed, rather than a dynamic puzzle to be solved. 
+3. \textbf{Disconnect between Generation and Management:} The highly scientific solutions provided in academia for scheduling, which are based on Genetic Algorithms, are characterized by terrible interfaces which are not usable by management teams. On the other hand, well-designed commercial products usually present a fixed schedule that is to be viewed, instead of solved.
 
-The literature thus establishes a clear trajectory: from purely mathematical algorithms that fail to account for human factors, to localized spreadsheet software that lacks systemic integration, to modern cloud-based systems that attempt to unify these domains.
+The literature therefore suggests the following path: pure algorithmic methods devoid of any consideration of human factors, local spreadsheet-based methods, and cloud-based integrated systems.
 
 \begin{table}[htbp]
 \centering
@@ -98,4 +98,4 @@ The literature thus establishes a clear trajectory: from purely mathematical alg
 \end{tabularx}
 \end{table}
 
-The system developed in this thesis builds upon this foundation, adopting the "Modern Cloud System" paradigm while specifically integrating a heuristic parser to bridge the gap with legacy spreadsheet data, laying a clean architectural foundation for future automated constraint-solving integration.
+The system designed in this thesis is based on this framework, employing the "Modern Cloud System" framework while incorporating a heuristic parser to overcome the limitations of legacy spreadsheet systems, creating an architectural framework that enables seamless automation of constraint solving systems in the future.
