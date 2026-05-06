@@ -22,52 +22,71 @@ Our system follows a classic three-tier architecture adapted for the modern web 
 %-----------------------------------
 \section{Database Schema Design}
 
-A well-structured relational schema is paramount for a scheduling system to maintain data integrity and support complex queries. The database is heavily normalized to prevent data duplication and anomalies. The core schema comprises the following primary entities and relationships:
+A well-structured relational schema is the backbone of any scheduling system. Our database is heavily normalised to prevent data duplication and enforce referential integrity. It contains eight tables in total---six core entities and two solver-support mapping tables. Figure~\ref{fig:er_diagram} shows the full entity-relationship diagram.
 
 \subsection{Core Entities}
 
 \begin{figure}[htbp]
 \centering
+\resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[
-    node distance=1.5cm and 2cm,
-    entity/.style={rectangle, draw, fill=blue!10, rounded corners, text width=3cm, align=center, minimum height=1cm, font=\sffamily\small},
-    relation/.style={diamond, draw, fill=orange!10, aspect=2, text width=2cm, align=center, font=\sffamily\scriptsize},
+    node distance=1.4cm and 2.5cm,
+    entity/.style={rectangle, draw, thick, fill=blue!8, rounded corners=3pt, text width=4.2cm, align=center, minimum height=1.2cm, font=\sffamily\small},
+    support/.style={rectangle, draw, thick, fill=green!8, rounded corners=3pt, text width=4.2cm, align=center, minimum height=1.2cm, font=\sffamily\small},
     line/.style={draw, thick, -{Latex[length=2mm]}},
+    dline/.style={draw, thick, dashed, -{Latex[length=2mm]}, gray!70},
     every node/.style={font=\sffamily}
 ]
 
-% Nodes
-\node[entity] (slots) {\textbf{timetable\_slots}\\ \scriptsize (id, start, end, day)};
-\node[entity, above=of slots] (timetables) {\textbf{timetables}\\ \scriptsize (id, semester, status)};
-\node[entity, left=of slots] (subjects) {\textbf{subjects}\\ \scriptsize (code, name, credits)};
-\node[entity, right=of slots] (professors) {\textbf{professors}\\ \scriptsize (email, name, dept)};
-\node[entity, below left=of slots] (rooms) {\textbf{rooms}\\ \scriptsize (name, capacity)};
-\node[entity, below right=of slots] (groups) {\textbf{student\_groups}\\ \scriptsize (name, semester)};
+% --- Row 1: timetables centred on top ---
+\node[entity] (timetables) {\textbf{timetables}\\ \scriptsize id, name, semester, status,\\ \scriptsize academic\_year, lunch\_start,\\ \scriptsize lunch\_end, created\_by, published\_at};
 
-% Relationships
-\draw[line] (slots) -- (timetables) node[midway, left] {belongs to};
-\draw[line] (slots) -- (subjects) node[midway, above] {teaches};
-\draw[line] (slots) -- (professors) node[midway, above] {assigned to};
-\draw[line] (slots) -- (rooms) node[midway, right, xshift=2mm] {hosted in};
-\draw[line] (slots) -- (groups) node[midway, left, xshift=-2mm] {attended by};
+% --- Row 2: main entities around timetable_slots ---
+\node[entity, below=2.5cm of timetables] (slots) {\textbf{timetable\_slots}\\ \scriptsize id, timetable\_id, subject\_id,\\ \scriptsize professor\_id, room\_id,\\ \scriptsize student\_group\_id, day\_of\_week,\\ \scriptsize start\_time, end\_time, slot\_type};
+
+\node[entity, left=2.5cm of slots] (subjects) {\textbf{subjects}\\ \scriptsize id, code, name, credits,\\ \scriptsize subject\_type, lectures,\\ \scriptsize tutorials, practicals,\\ \scriptsize practical\_duration, elective\_group};
+
+\node[entity, right=2.5cm of slots] (professors) {\textbf{professors}\\ \scriptsize id, name, email, department};
+
+\node[entity, below left=2cm and 0.5cm of slots] (rooms) {\textbf{rooms}\\ \scriptsize id, name, capacity, room\_type};
+
+\node[entity, below right=2cm and 0.5cm of slots] (groups) {\textbf{student\_groups}\\ \scriptsize id, name, semester,\\ \scriptsize program, group\_type};
+
+% --- Row 3: Solver support entities ---
+\node[support, below=4.5cm of subjects] (clusters) {\textbf{semester\_clusters}\\ \scriptsize id, batch\_year, semester\_number,\\ \scriptsize department, is\_active};
+
+\node[support, right=1.5cm of clusters] (requirements) {\textbf{cluster\_requirements}\\ \scriptsize id, cluster\_id, subject\_id,\\ \scriptsize elective\_basket,\\ \scriptsize estimated\_enrollment};
+
+\node[support, right=1.5cm of requirements] (expertise) {\textbf{professor\_expertise}\\ \scriptsize id, professor\_id, subject\_id,\\ \scriptsize preference\_level};
+
+% --- Core FK relationships ---
+\draw[line] (slots) -- node[right, font=\scriptsize] {belongs to} (timetables);
+\draw[line] (slots) -- node[above, font=\scriptsize] {references} (subjects);
+\draw[line] (slots) -- node[above, font=\scriptsize] {assigned to} (professors);
+\draw[line] (slots) -- node[left, font=\scriptsize, xshift=-1mm] {hosted in} (rooms);
+\draw[line] (slots) -- node[right, font=\scriptsize, xshift=1mm] {attended by} (groups);
+
+% --- Support table relationships ---
+\draw[dline] (requirements) -- node[left, font=\scriptsize] {scopes} (clusters);
+\draw[dline] (requirements.north) -- ++(0,0.8) -| node[above, near start, font=\scriptsize] {links to} (subjects.south);
+\draw[dline] (expertise.north) -- ++(0,1.2) -| node[above, near start, font=\scriptsize] {links to} (professors.south);
 
 \end{tikzpicture}
-\caption{Simplified Entity-Relationship Diagram of the Core Schema}
+}%
+\caption{Entity-Relationship Diagram of the Complete Database Schema}
 \label{fig:er_diagram}
 \end{figure}
 
 \begin{itemize}
-    \item \textbf{`timetables`:} Represents a specific iteration of a schedule (e.g., "B.Tech Sem 3 - Monsoon 2024"). It acts as the parent container for all scheduled slots. Attributes include the academic year, semester, publication status, and institutional break times (lunch start/end).
-    \item \textbf{`subjects`:} Contains metadata for all offered courses. Attributes include the unique subject code, name, credit distribution (Lectures, Tutorials, Practicals), subject type (Core, Elective, Minor), and elective grouping data.
-    \item \textbf{`professors`:} Stores faculty information, uniquely identified by email, alongside their departmental affiliation.
-    \item \textbf{`rooms`:} Catalogs the physical infrastructure of the campus. Attributes include the unique room name (e.g., "CC-3-1001"), seating capacity, and room type (e.g., Lecture Hall, Computer Lab).
-    \item \textbf{\texttt{student\_groups}:} Represents a specific cohort of students, defined by a unique combination of group name (e.g., "Sec A") and semester.
+    \item \textbf{\texttt{timetables}:} The parent container for a schedule iteration (e.g., ``IT Sem-5 (2023)''). Key attributes include \texttt{name}, \texttt{semester}, \texttt{academic\_year} (e.g., ``2025-26''), \texttt{status} (draft or published), \texttt{lunch\_start}/\texttt{lunch\_end} (defaults: 13:00--14:30), \texttt{created\_by} (the admin user), and \texttt{published\_at}.
+    \item \textbf{\texttt{subjects}:} Stores all offered courses. Attributes include the unique \texttt{code}, \texttt{name}, total \texttt{credits}, \texttt{subject\_type} (Core, Elective, or Minor), L-T-P breakdown (\texttt{lectures}, \texttt{tutorials}, \texttt{practicals}), \texttt{practical\_duration} (in minutes), and \texttt{elective\_group} (e.g., ``HSMC'', ``Basket 1'').
+    \item \textbf{\texttt{professors}:} Faculty members, uniquely identified by \texttt{email}, with \texttt{name} and \texttt{department}.
+    \item \textbf{\texttt{rooms}:} Physical campus rooms. Attributes include the unique \texttt{name} following the \texttt{CC-\{building\}-\{number\}} convention (e.g., ``CC-3-5106'', ``CC-3-5207''), seating \texttt{capacity} (default 60), and \texttt{room\_type} (Lecture or Lab---derived from whether the room hosts only Practical sessions).
+    \item \textbf{\texttt{student\_groups}:} A student cohort defined by \texttt{name} (e.g., ``Sec A'', ``Sec B'', ``WMC'' for whole-batch, or ``IT-BI'' for the IT-BI programme), \texttt{semester}, \texttt{program} (``B.Tech''), and \texttt{group\_type} (``Core''). The unique constraint is on \texttt{(name, semester)}.
 \end{itemize}
 
 \subsection{The Central Hub: \texttt{timetable\_slots}}
-The \texttt{timetable\_slots} table is the central junction of the schema. It represents a specific class occurrence in time and space. It acts as a massive join table, linking a specific \texttt{timetable\_id} to a \texttt{subject\_id}, \texttt{professor\_id}, \texttt{room\_id}, and \texttt{student\_group\_id}. 
-
-Crucially, it also defines the temporal coordinates of the event, as detailed in Table~\ref{tab:schema_slots}.
+The \texttt{timetable\_slots} table is the heart of the schema---a massive junction table that links a specific timetable to a subject, professor, room, and student group at a particular point in time. Table~\ref{tab:schema_slots} lists every column.
 
 \begin{table}[htbp]
 \centering
@@ -83,20 +102,21 @@ Crucially, it also defines the temporal coordinates of the event, as detailed in
 \texttt{subject\_id} & \texttt{UUID} & Foreign Key referencing \texttt{subjects}. \\
 \texttt{professor\_id} & \texttt{UUID} & Foreign Key referencing \texttt{professors}. \\
 \texttt{room\_id} & \texttt{UUID} & Foreign Key referencing \texttt{rooms}. \\
+\texttt{student\_group\_id} & \texttt{UUID} & Foreign Key referencing \texttt{student\_groups}. \\
 \texttt{day\_of\_week} & \texttt{Integer} & $1 = \text{Monday}, \dots, 5 = \text{Friday}$. \\
-\texttt{start\_time} & \texttt{VarChar} & 24-hour format (e.g., "09:00"). \\
-\texttt{end\_time} & \texttt{VarChar} & 24-hour format (e.g., "11:00"). \\
-\texttt{slot\_type} & \texttt{VarChar} & Enum: 'Lecture', 'Tutorial', 'Practical'. \\
+\texttt{start\_time} & \texttt{VarChar} & 24-hour format (e.g., ``09:00''). \\
+\texttt{end\_time} & \texttt{VarChar} & 24-hour format (e.g., ``11:00''). \\
+\texttt{slot\_type} & \texttt{VarChar} & Enum: `Lecture', `Tutorial', `Practical'. \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
 \subsection{Generator and Solver Support Entities}
-To support automated timetable generation, the schema includes mapping tables that define the constraints and requirements for specific semesters. These tables are actively used by the Generator Wizard and the solver engine:
+To support automated timetable generation, the schema includes three mapping tables (shown in green in Figure~\ref{fig:er_diagram}). These are used by the Generator Wizard and the solver engine:
 \begin{itemize}
-    \item \textbf{\texttt{semester\_clusters}:} Defines active academic clusters (e.g., Batch 2021, Semester 5, IT Department). The generator UI uses these clusters to scope the scheduling problem.
-    \item \textbf{\texttt{cluster\_requirements}:} A many-to-many join table linking a \texttt{semester\_cluster} to the \texttt{subjects} that must be scheduled for that cohort. Includes \texttt{estimated\_enrollment} for room utilization optimization.
-    \item \textbf{\texttt{professor\_expertise}:} A mapping table linking \texttt{professors} to \texttt{subjects} they are qualified to teach, along with a preference level. This is used by the auto-fill feature in the Generator Wizard to intelligently suggest professor assignments.
+    \item \textbf{\texttt{semester\_clusters}:} Defines active academic clusters (e.g., Batch 2023, Semester 3, Department ``IT''). Attributes include \texttt{batch\_year}, \texttt{semester\_number}, \texttt{department}, and \texttt{is\_active}. The generator UI filters for active clusters and uses them to scope the scheduling problem.
+    \item \textbf{\texttt{cluster\_requirements}:} A many-to-many join linking a cluster to the subjects that must be scheduled. Includes \texttt{elective\_basket} (the basket name for elective grouping) and \texttt{estimated\_enrollment} (used by the solver's room utilisation soft constraint).
+    \item \textbf{\texttt{professor\_expertise}:} Links professors to the subjects they are qualified to teach, along with a \texttt{preference\_level}. The auto-fill feature in the Generator Wizard uses this to intelligently suggest professor assignments.
 \end{itemize}
 
 \subsection{Solver Data Model: Class Diagram}
@@ -233,8 +253,8 @@ A major architectural feature of the system is its ability to ingest unstructure
 
 \begin{enumerate}
     \item \textbf{Binary Parsing:} The user uploads an `.xlsx` file. The `xlsx` library reads the binary stream and converts the active spreadsheet into a two-dimensional JSON array.
-    \item \textbf{Header Synchronization:} The heuristic engine scans the top rows to identify the time boundary headers. It extracts standard 1-hour blocks (e.g., 9:00-10:00) and multi-hour blocks.
-    \item \textbf{Metadata Extraction:} The engine locates the "Course Code / Faculties" section of the spreadsheet. It applies Regular Expressions (Regex) to map subject codes to full names and extracts the L-T-P-S credit structures. It also parses complex faculty assignment strings (e.g., identifying that "Prof. X" teaches "Sec A \& B" while "Prof. Y" teaches "Sec C").
+    \item \textbf{Header Synchronization:} The heuristic engine scans Row 2 to identify time boundary headers. It converts both colon and dot formats (e.g., ``9:00-10:00'' or ``9.00-10.00'') into normalised 24-hour strings and detects multi-hour merged-cell blocks for practical sessions.
+    \item \textbf{Metadata Extraction:} The engine locates the ``Course Code / Faculties'' section of the spreadsheet. It applies Regular Expressions to map subject codes to full names and extracts the L-T-P-S credit structure (e.g., ``3-1-0-0''). It also parses complex faculty assignment strings---for instance, identifying that ``Dr.~Sharma(A \& B), Dr.~Gupta(C \& D)'' means Dr.~Sharma teaches Sections A and B while Dr.~Gupta teaches Sections C and D.
     \item \textbf{Grid Traversal and Extraction:} The engine iterates over the main timetable grid. For each cell, it:
     \begin{itemize}
         \item Identifies the current day from the leftmost column.

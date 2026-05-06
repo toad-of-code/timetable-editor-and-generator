@@ -3,7 +3,7 @@
 \addvspace {10\p@ }
 \contentsline {figure}{\numberline {3.1}{\ignorespaces High-Level System Architecture and Component Interaction}}{15}{figure.caption.41}%
 \addvspace {10\p@ }
-\contentsline {figure}{\numberline {4.1}{\ignorespaces Simplified Entity-Relationship Diagram of the Core Schema}}{25}{figure.caption.59}%
+\contentsline {figure}{\numberline {4.1}{\ignorespaces Entity-Relationship Diagram of the Complete Database Schema}}{25}{figure.caption.59}%
 \contentsline {figure}{\numberline {4.2}{\ignorespaces UML Class Diagram of the Solver Data Model}}{28}{figure.caption.64}%
 \contentsline {figure}{\numberline {4.3}{\ignorespaces Data Ingestion Pipeline for Excel Timetables}}{29}{figure.caption.66}%
 \addvspace {10\p@ }

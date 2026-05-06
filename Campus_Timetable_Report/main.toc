@@ -38,10 +38,10 @@
 \contentsline {section}{\numberline {4.2}Database Schema Design}{25}{section.57}%
 \contentsline {subsection}{\numberline {4.2.1}Core Entities}{25}{subsection.58}%
 \contentsline {subsection}{\numberline {4.2.2}The Central Hub: \texttt {timetable\_slots}}{26}{subsection.60}%
-\contentsline {subsection}{\numberline {4.2.3}Generator and Solver Support Entities}{26}{subsection.62}%
-\contentsline {subsection}{\numberline {4.2.4}Solver Data Model: Class Diagram}{27}{subsection.63}%
-\contentsline {section}{\numberline {4.3}The Data Ingestion Pipeline}{29}{section.65}%
-\contentsline {section}{\numberline {4.4}View Routing and State Management}{30}{section.72}%
+\contentsline {subsection}{\numberline {4.2.3}Generator and Solver Support Entities}{27}{subsection.62}%
+\contentsline {subsection}{\numberline {4.2.4}Solver Data Model: Class Diagram}{28}{subsection.63}%
+\contentsline {section}{\numberline {4.3}The Data Ingestion Pipeline}{28}{section.65}%
+\contentsline {section}{\numberline {4.4}View Routing and State Management}{31}{section.72}%
 \contentsline {chapter}{\numberline {5}Implementation and Results}{32}{chapter.73}%
 \contentsline {section}{\numberline {5.1}Dynamic Time Grid Generation}{32}{section.74}%
 \contentsline {section}{\numberline {5.2}Multi-Dimensional Clash Detection Algorithm}{33}{section.80}%

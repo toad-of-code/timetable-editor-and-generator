@@ -144,7 +144,7 @@ The system provides several specialized views tailored to different stakeholders
 Student & \texttt{TimetableViewer} & Semester \& Specific Section \\
 Professor & \texttt{ProfessorTimetableViewer} & Faculty Email/ID \\
 Department Admin & \texttt{RoomTimetableViewer} & Specific Room Name \\
-Campus Admin & \texttt{MasterRoomViewer} & Building Prefix (e.g., "CC-3") \\
+Campus Admin & \texttt{MasterRoomViewer} & Building prefix (e.g., ``CC-3'', ``LT'') \\
 Facility Staff & \texttt{FreeRoomViewer} & Temporal Matrix (Empty Rooms) \\
 \bottomrule
 \end{tabularx}
@@ -156,7 +156,7 @@ Given the complexity of modern curricula featuring numerous electives and minor 
 Crucially, it implements a \textbf{Smart Merging algorithm}. Often, core lectures are held for "All Sections" simultaneously, while practical laboratory sessions are split by specific section (e.g., "Sec A"). The merging algorithm intelligently filters the master data, pulling in slots explicitly assigned to the selected section \textit{and} slots assigned to the generic "All" section (WMC), combining them into a single, cohesive cohort schedule.
 
 \subsection{Master Occupancy Viewer}
-For campus administrators, the `MasterRoomViewer` provides a macro-level perspective. It displays a dense grid where rows represent physical rooms rather than student groups. Because an institution may have hundreds of rooms, this view implements a building-level filter. The system extracts the building prefix from the room name (e.g., identifying "CC-3" from "CC-3-1001") and allows the administrator to filter the grid, rendering a manageable overview of specific campus zones.
+For campus administrators, the `MasterRoomViewer` provides a macro-level perspective. It displays a dense grid where rows represent physical rooms rather than student groups. Because an institution may have hundreds of rooms, this view implements a building-level filter. The system extracts the building prefix from the room name (e.g., identifying ``CC-3'' from ``CC-3-5106'') and allows the administrator to filter the grid, rendering a manageable overview of specific campus zones.
 
 %-----------------------------------
 \section{Export Mechanisms and Results}
@@ -459,20 +459,20 @@ The \texttt{GeneratorView} component is the front door to the solver. It walks a
 
 \subsection{Step 1: Cluster Selection}
 
-The administrator selects a \texttt{semester\_cluster} (e.g., ``IT Dept, Sem 5, Batch 2023''). This scopes the scheduling problem by loading the associated subjects (with L-T-P configurations) and student groups (sections) from the database.
+The administrator selects a \texttt{semester\_cluster} (e.g., ``IT, Sem 3, Batch 2023''). This scopes the scheduling problem by loading the associated subjects (with L-T-P configurations) and student groups (sections like Sec A--D, WMC, and IT-BI) from the database.
 
 \subsection{Step 2: Home Room Mapping}
 
-Each student group (section) is mapped to a home room. The system implements an automatic \textbf{floor-based home room policy}: rooms follow the naming pattern \texttt{CC-3-5}\emph{x}\emph{yy}, where \emph{x} is the floor digit derived from the semester number (Semesters 1--2 $\to$ floor 0, 3--4 $\to$ floor 1, 5--6 $\to$ floor 2) and \emph{yy} is the section suffix (A $\to$ 06, B $\to$ 07, C $\to$ 54, D $\to$ 55). This policy is applied automatically on cluster selection and can be overridden manually.
+Each student group (section) is mapped to a home room. Home rooms follow IIITA's floor-based naming convention: \texttt{CC-3-5\{floor\}\{suffix\}}, where the floor digit is derived from the semester (semesters 1--2 $\to$ floor 0, semesters 3--4 $\to$ floor 1, semesters 5--6 $\to$ floor 2) and the suffix maps to the section letter (A$\to$06, B$\to$07, C$\to$54, D$\to$55). For example, Semester 3, Section B maps to room \texttt{CC-3-5107}. The wizard auto-applies this policy when a cluster is selected, falling back to round-robin assignment for any group that cannot be matched.
 
 \subsection{Step 3: Professor Assignment Matrix}
 
 An interactive matrix presents subjects as rows and student groups as columns. For each cell, the administrator selects a professor from a dropdown filtered by the \texttt{professor\_expertise} table. Each subject supports four scheduling modes:
 \begin{itemize}
     \item \textbf{Sections:} Assigns individually to each section (A, B, C, D).
-    \item \textbf{All (WMC):} Assigns to the whole-batch ``WMC'' group.
-    \item \textbf{IT-BI:} Assigns only to the IT-BI interdisciplinary group.
-    \item \textbf{Disabled:} Excludes the subject from scheduling entirely.
+    \item \textbf{All (WMC):} Assigns to the whole-batch ``WMC'' group (used for core lectures taught to all sections simultaneously).
+    \item \textbf{IT-BI:} Assigns only to the ``IT-BI'' group (for subjects exclusive to the IT-BI programme).
+    \item \textbf{Disabled:} Excludes the subject entirely from the solver.
 \end{itemize}
 
 An ``Auto-Fill'' button populates all unset cells using round-robin professor assignment from the expertise pool.
