@@ -1,14 +1,14 @@
 \addvspace {10\p@ }
 \addvspace {10\p@ }
-\contentsline {table}{\numberline {2.1}{\ignorespaces Comparison of Timetabling Methodologies}}{15}{table.caption.37}%
+\contentsline {table}{\numberline {2.1}{\ignorespaces Comparison of Timetabling Methodologies}}{13}{table.caption.37}%
 \addvspace {10\p@ }
-\contentsline {table}{\numberline {3.1}{\ignorespaces Summary of the Technology Stack}}{16}{table.caption.39}%
+\contentsline {table}{\numberline {3.1}{\ignorespaces Summary of the Technology Stack}}{14}{table.caption.39}%
 \addvspace {10\p@ }
-\contentsline {table}{\numberline {4.1}{\ignorespaces Schema Specification for \texttt {timetable\_slots}}}{29}{table.caption.61}%
+\contentsline {table}{\numberline {4.1}{\ignorespaces Schema Specification for \texttt {timetable\_slots}}}{27}{table.caption.61}%
 \addvspace {10\p@ }
-\contentsline {table}{\numberline {5.1}{\ignorespaces Types of Scheduling Clashes Detected}}{36}{table.caption.82}%
-\contentsline {table}{\numberline {5.2}{\ignorespaces Role-Based Component Mapping and Data Scope}}{38}{table.caption.92}%
-\contentsline {table}{\numberline {5.3}{\ignorespaces Hard Constraints Enforced by the Solver}}{43}{table.caption.106}%
+\contentsline {table}{\numberline {5.1}{\ignorespaces Types of Scheduling Clashes Detected}}{34}{table.caption.82}%
+\contentsline {table}{\numberline {5.2}{\ignorespaces Role-Based Component Mapping and Data Scope}}{37}{table.caption.92}%
+\contentsline {table}{\numberline {5.3}{\ignorespaces Hard Constraints Enforced by the Solver}}{41}{table.caption.106}%
 \addvspace {10\p@ }
-\contentsline {table}{\numberline {6.1}{\ignorespaces System Limitations and Future Enhancements}}{57}{table.caption.154}%
+\contentsline {table}{\numberline {6.1}{\ignorespaces System Limitations and Future Enhancements}}{56}{table.caption.154}%
 \addvspace {10\p@ }
