@@ -80,7 +80,9 @@ export const SYNCED_BASKETS = new Set(['HSMC', 'MDM']);
 
 /** Returns true if the given basket name is a synced basket. */
 export function isSyncedBasket(basketName: string | null): boolean {
-    return basketName !== null && SYNCED_BASKETS.has(basketName);
+    if (!basketName) return false;
+    const normalized = basketName.trim().toUpperCase();
+    return SYNCED_BASKETS.has(normalized);
 }
 
 // ─── Default Solver Config ─────────────────────────────────────────────────────

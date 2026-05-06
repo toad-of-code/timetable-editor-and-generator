@@ -131,7 +131,7 @@ export function prepareSolverInput(
                         homeRoomIndex,
                         isElective,
                         electiveSlotIndex: isElective ? l : -1,
-                        basketName: isElective ? (subject.elective_basket ?? null) : null,
+                        basketName: isElective ? (subject.elective_basket?.trim().toUpperCase() ?? null) : null,
                         isWMCGroup,
                         lecturePairIndex: -2, // not applicable
                         studentCount: subjectEnrollment,
@@ -153,7 +153,7 @@ export function prepareSolverInput(
                     homeRoomIndex,
                     isElective,
                     electiveSlotIndex: isElective ? t : -1,
-                    basketName: isElective ? (subject.elective_basket ?? null) : null,
+                    basketName: isElective ? (subject.elective_basket?.trim().toUpperCase() ?? null) : null,
                     isWMCGroup,
                     lecturePairIndex: -2, // not applicable
                     studentCount: subjectEnrollment,
@@ -179,7 +179,7 @@ export function prepareSolverInput(
                     homeRoomIndex,
                     isElective,
                     electiveSlotIndex: isElective ? p : -1,
-                    basketName: isElective ? (subject.elective_basket ?? null) : null,
+                    basketName: isElective ? (subject.elective_basket?.trim().toUpperCase() ?? null) : null,
                     isWMCGroup,
                     lecturePairIndex: -2, // not applicable
                     studentCount: subjectEnrollment,

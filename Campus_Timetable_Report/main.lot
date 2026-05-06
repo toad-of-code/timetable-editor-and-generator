@@ -6,9 +6,9 @@
 \addvspace {10\p@ }
 \contentsline {table}{\numberline {4.1}{\ignorespaces Schema Specification for \texttt {timetable\_slots}}}{20}{table.caption.51}%
 \addvspace {10\p@ }
-\contentsline {table}{\numberline {5.1}{\ignorespaces Types of Scheduling Clashes Detected}}{27}{table.caption.69}%
-\contentsline {table}{\numberline {5.2}{\ignorespaces Role-Based Component Mapping and Data Scope}}{30}{table.caption.79}%
-\contentsline {table}{\numberline {5.3}{\ignorespaces Hard Constraints Enforced by the Solver}}{34}{table.caption.93}%
+\contentsline {table}{\numberline {5.1}{\ignorespaces Hard Constraints Enforced by the Solver}}{29}{table.caption.75}%
+\contentsline {table}{\numberline {5.2}{\ignorespaces Types of Scheduling Clashes Detected}}{37}{table.caption.103}%
+\contentsline {table}{\numberline {5.3}{\ignorespaces Role-Based Component Mapping and Data Scope}}{40}{table.caption.113}%
 \addvspace {10\p@ }
-\contentsline {table}{\numberline {6.1}{\ignorespaces System Limitations and Future Enhancements}}{49}{table.caption.141}%
+\contentsline {table}{\numberline {6.1}{\ignorespaces System Limitations and Future Enhancements}}{49}{table.caption.134}%
 \addvspace {10\p@ }

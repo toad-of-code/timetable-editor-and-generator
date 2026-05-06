@@ -5,12 +5,13 @@
 \addvspace {10\p@ }
 \contentsline {figure}{\numberline {4.1}{\ignorespaces Entity-Relationship Diagram of the Complete Database Schema}}{19}{figure.caption.49}%
 \contentsline {figure}{\numberline {4.2}{\ignorespaces UML Class Diagram of the Solver Data Model}}{21}{figure.caption.53}%
-\contentsline {figure}{\numberline {4.3}{\ignorespaces Data Ingestion Pipeline for Excel Timetables}}{22}{figure.caption.54}%
+\contentsline {figure}{\numberline {4.3}{\ignorespaces Data Ingestion Pipeline for Excel Timetables}}{23}{figure.caption.55}%
 \addvspace {10\p@ }
-\contentsline {figure}{\numberline {5.1}{\ignorespaces Inverted Logic Flowchart for the Free Room Finder Algorithm}}{28}{figure.caption.71}%
-\contentsline {figure}{\numberline {5.2}{\ignorespaces Hierarchical Structure of the Core React Components}}{29}{figure.caption.77}%
-\contentsline {figure}{\numberline {5.3}{\ignorespaces Activity Diagram: (1+1)-ES Solver Execution Flow}}{39}{figure.caption.117}%
-\contentsline {figure}{\numberline {5.4}{\ignorespaces Activity Diagram: LNS Destroy-and-Repair Auto-Fix}}{42}{figure.caption.128}%
-\contentsline {figure}{\numberline {5.5}{\ignorespaces Sequence Diagram: End-to-End Intelligent Generator Workflow}}{45}{figure.caption.137}%
+\contentsline {figure}{\numberline {5.1}{\ignorespaces Sequence Diagram: End-to-End Intelligent Generator Workflow}}{26}{figure.caption.63}%
+\contentsline {figure}{\numberline {5.2}{\ignorespaces Activity Diagram: (1+1)-ES Solver Execution Flow}}{33}{figure.caption.87}%
+\contentsline {figure}{\numberline {5.3}{\ignorespaces Activity Diagram: LNS Destroy-and-Repair Auto-Fix}}{34}{figure.caption.89}%
+\contentsline {figure}{\numberline {5.4}{\ignorespaces Inverted Logic Flowchart for the Free Room Finder Algorithm}}{39}{figure.caption.105}%
+\contentsline {figure}{\numberline {5.5}{\ignorespaces Hierarchical Structure of the Core React Components}}{40}{figure.caption.111}%
+\contentsline {figure}{\numberline {5.6}{\ignorespaces Activity Diagram: LNS Destroy-and-Repair Auto-Fix}}{45}{figure.caption.130}%
 \addvspace {10\p@ }
 \addvspace {10\p@ }
