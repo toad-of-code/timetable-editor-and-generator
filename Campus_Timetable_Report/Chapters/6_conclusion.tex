@@ -6,49 +6,62 @@
 
 %----------------------------------------------------------------------------------------
 
-Timetabling touches every person on a university campus, every single day. Getting it wrong means wasted hours, frustrated students, and overworked coordinators. In this thesis, we set out to replace the manual, spreadsheet-driven scheduling process at IIIT Allahabad with something better: a modern, web-based platform that can generate, edit, and distribute timetables intelligently.
-
+This project replaced the manual, spreadsheet-driven scheduling process at IIIT Allahabad with a web-based platform for the automated generation and management of university timetables. The system provides a centralized environment for data ingestion, conflict-aware editing, and automated scheduling using evolutionary algorithms.
 %-----------------------------------
 \section{Summary of Contributions}
 
-The biggest achievement of this project is taking what used to be a weeks-long manual process and turning it into something that runs in seconds. Here is what we built:
+Key outcomes of the project include the development of a working scheduling system featuring the following:
 \begin{itemize}
-    \item \textbf{Heuristic Ingestion Engine:} We wrote an Excel parser that can read IIITA's messy, human-formatted spreadsheets, pull out the important bits (subjects, faculty, rooms), and load everything into a clean PostgreSQL database. This alone saves hours of manual data entry.
-    \item \textbf{Real-Time Conflict Resolution:} The implementation of a multi-dimensional $O(N^2)$ clash detection algorithm that automatically surfaces Room, Professor, Section, and WMC-Section overlaps. This feature alone significantly reduces the administrative burden of manually verifying schedule integrity.
-    \item \textbf{(1+1)-ES Automated Solver:} The implementation of a fully functional timetable generator using a (1+1) Evolution Strategy algorithm. The solver evaluates candidate schedules against a comprehensive fitness function comprising ten hard constraints (room, professor, and group non-overlap; break/lunch boundary enforcement; lab-room assignment; elective basket synchronization; WMC-section isolation; home-room binding; the 2+1 lecture format; and time boundary compliance) and three soft constraints (student schedule gaps, room utilization efficiency, and professor same-half-day avoidance). The algorithm employs Rechenberg's 1/5th success rule for adaptive step-size control and a stagnation restart mechanism.
-    \item \textbf{Interactive Timetable Editor:} The development of a drag-and-drop editing interface with real-time conflict visualization, inline room and professor editing, a 30-level undo stack, and a Large Neighbourhood Search (LNS) auto-fix routine that targets clashing sessions. The editor's Master View provides cross-semester constraint awareness by overlaying slots from all published timetables.
-    \item \textbf{Multi-Step Intelligent Generator:} The creation of a guided configuration workflow enabling administrators to select semester clusters, auto-map home rooms using a floor-based naming policy, assign professors via an interactive matrix with expertise-based filtering, and configure seed and locked timetables before launching the solver.
-    \item \textbf{Cross-Semester Constraint Awareness:} The implementation of locked sessions from published timetables, enabling the solver and editor to detect and avoid room and professor conflicts across independently scheduled semesters.
-    \item \textbf{Stakeholder-Specific Interfaces:} The creation of dynamic, role-based visualization components. The dedicated ``Student View'' for filtering specific cohort schedules, the ``Professor View,'' and the macro-level ``Master Occupancy'' and ``Free Room Finder'' views ensure that every user receives actionable data without cognitive overload.
-    \item \textbf{Modern Technical Architecture:} The deployment of a high-performance frontend utilizing React 19, TypeScript, and Vite, paired with a serverless Supabase backend. This stack ensures the application is highly responsive, strictly typed, and easily maintainable.
-    \item \textbf{Professional Export Capabilities:} The integration of client-side PDF generation and automated Google Sheets API formatting, bridging the gap between dynamic web views and the necessity for static, offline documentation.
-\end{itemize}
+    \item \textbf{Heuristic Ingestion Engine:} A parser for Excel sheets using \texttt{SheetJS} to normalize unstructured data into the PostgreSQL database containing subject information, faculty allocations, and credits.
+    \item \textbf{Conflict Detection Algorithm:} A multi-dimensional $O(N^2)$ algorithm which detects conflicts based on rooms, faculties, and students' classes, as well as whole-batch (WMC) constraints.  \item \textbf{Evolution Strategy Solver:} A (1+1)-ES implementation that evaluates schedules against ten hard and three soft constraints. It utilizes Rechenberg's 1/5th success rule for adaptive mutation control and a stagnation restart mechanism.
+    \item \textbf{Interactive Editor:} An interactive editor that employs drag and drop along with the React framework, including the visualization of conflicting sessions and LNS for automatic fixing of problems.
+    \item \textbf{Multistep Configuration Process:} A multistep configuration process where users specify semester groupings, assign home rooms, allocate teachers, and run the solver afterward.
+   \item \textbf{Independence of Sessions Across Semesters:} Blocking of sessions from earlier schedule releases to prevent any clashing classrooms or lecturers across courses.    
+\item \textbf{Architecture:} The system will be built using a scalable architecture involving React 19, TypeScript, and Vite on the frontend, and Supabase for authentications and database storage of related data.
+\item \textbf{Exports:} Support for client-side PDF export and Google Sheets exports for administrative purposes.\end{itemize}
 
 %----------------------------------------------------------------------------------------
-\section{Current Limitations and Proposed Enhancements}
+\section{Future Work – Phase 2 – Integration with M.Tech}
 
-No system is perfect, and ours is no exception. The limitations we have identified point directly to the most promising areas for future work. Table~\ref{tab:future_scope} summarises what we see as the key gaps and how they could be addressed.
+The first step in future development will be the integration of M.Tech courses within the automatic solver. The complexity of the algorithm will increase because of a paradigm shift from one-tier scheduling to multi-tier scheduling having interdependencies amongst itself, i.e., the ``Basket Tethering'' Problem.
 
-\begin{table}[htbp]
-\centering
-\caption{System Limitations and Future Enhancements}
-\label{tab:future_scope}
-\renewcommand{\arraystretch}{1.5}
-\begin{tabularx}{\textwidth}{@{} l X X @{}}
-\toprule
-\textbf{Domain} & \textbf{Current Limitation} & \textbf{Proposed Enhancement} \\
-\midrule
-\textbf{Data Ingestion} & Heavily reliant on hardcoded regular expressions to parse IIITA's specific Excel format. & Implementation of a dynamic mapping UI allowing users to visually map Excel columns to DB fields. \\
-\textbf{Solver Performance} & Single-threaded (1+1)-ES running on the browser's main thread via batched \texttt{setTimeout}. Sufficient for current problem sizes but may become a bottleneck for larger institutions. & Migration to Web Workers for parallel solver execution, or a server-side solver for larger problem instances. Exploration of hybrid meta-heuristics (e.g., memetic algorithms combining ES with local search). \\
-\textbf{Solver Optimality} & The Evolution Strategy is a meta-heuristic; solutions are feasible but not guaranteed to be globally optimal with respect to soft constraints. & Investigation of multi-objective optimization (Pareto-optimal fronts) and hybridization with constraint programming (CP) solvers for provable optimality on subproblems. \\
-\textbf{State Management} & Relies on localized React state and custom hooks, potentially causing prop-drilling in deep components. & Adoption of a global state manager (e.g., Zustand or Redux) to optimize data sharing across views. \\
-\textbf{Notifications} & Users must actively check the web portal for schedule updates. & Development of a Progressive Web App (PWA) with Push Notifications via Firebase Cloud Messaging. \\
-\textbf{Analytics} & Basic occupancy visualization without long-term historical analysis. & Dedicated BI Dashboard to track room utilization metrics across multiple academic years. \\
-\bottomrule
-\end{tabularx}
-\end{table}
+\subsection{The Basket Tethering Problem}
 
+The three specializations of M.Tech courses (MLIS, HCI, and CLIS) do not operate independently of each other in the respect that they tend to select courses in certain “baskets” offered under B.Tech VIth sem. The consequence of such selection is that the M.Tech schedules are dependent on those of the B.Tech, such that M.Tech can only be scheduled after specific time-slots have been allocated. The future plan will be to adopt a hierarchical solving approach by assigning anchors as common windows amongst the two schedules.
+
+\subsection{Solving Core Duality}
+
+There are many instances where there exist core duality in courses as some M.Techs consider a subject as core for themselves while for others it is elective (for example: Deep Learning and NLP). The next task is to schedule the dual course once.
+
+\subsection{Meta-Grouping and Collision Handling}
+
+In order to handle the added complications of the scenario, the following meta grouping method is suggested.
+
+
+\begin{itemize}
+
+    \item The specializations would be grouped into disjointed meta-groups (e.g., Meta-Batch A = \{MLIS, RMI, HCI\}) based on the common subject area they share.
+
+    \item A sequence of steps for addressing the issue of the ``Three-Way Collision'' should be determined.
+
+\end{itemize}
+
+\subsection{Scalability of Algorithmic Solution}
+
+Given the growing number of constraints because of the inclusion of M.Tech subjects, it is possible that the $(1+1)$-ES algorithm would need to be reworked with parallel computing using Web Workers or by merging ES and CP.
+
+\subsection{Technical Requirements at the Core}
+
+\begin{itemize}
+
+    \item \textbf{Requirement:} Integration of M.Tech specialization courses within the same framework of B.Tech course structure without any conflict.
+
+    \item \textbf{Algorithms:} Give preference to Hierarchy solution: Anchors $\rightarrow$ M.Tech Core $\rightarrow$ B.Tech Core $\rightarrow$ Soft Constraints.
+
+    \item \textbf{Conflict Handling:} Solve the ``Three-Way Clash" problem, avoiding any schedule conflict for instructors working at different levels.
+
+\end{itemize}   
 %-----------------------------------
-\section{Concluding Remarks}
+\section{Conclusion}
 
-Looking back, we are proud of what we have built. The IIITA Timetabling System takes a problem that used to consume weeks of manual effort and solves it in seconds, right in the browser. Our (1+1)-ES solver reliably produces feasible, high-quality timetables; the drag-and-drop editor lets administrators fine-tune results with full constraint awareness; and the role-specific views ensure that every stakeholder---from first-year students to campus administrators---gets exactly the information they need. Perhaps most importantly, the project demonstrates that you do not need heavyweight server infrastructure to solve real scheduling problems: a well-designed, pure-TypeScript solver running on the client side is more than enough for a real-world university. We hope this work serves as a practical blueprint for other institutions looking to modernise their scheduling workflows.
+Timetabling System for IIITA shows that complex issues of timetabling in university settings can be resolved through the use of web technology. The timetables produced by the (1+1)-ES algorithm are consistent with the provided constraints, whereas any manual modification can be performed within the editor application. A serverless approach to processing data with the help of the TypeScript version of the solver is appropriate for educational organizations.
