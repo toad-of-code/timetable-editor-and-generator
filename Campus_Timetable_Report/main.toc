@@ -1,91 +1,82 @@
 \contentsline {chapter}{Abstract}{iii}{section*.8}%
-\contentsline {chapter}{Acknowledgements}{v}{chapter*.10}%
-\contentsline {chapter}{List of Figures}{ix}{chapter*.12}%
-\contentsline {chapter}{List of Tables}{x}{chapter*.13}%
-\contentsline {chapter}{\numberline {1}Introduction}{1}{chapter.14}%
-\contentsline {section}{\numberline {1.1}Background and Motivation}{1}{section.15}%
-\contentsline {section}{\numberline {1.2}Problem Statement}{2}{section.16}%
-\contentsline {section}{\numberline {1.3}Objectives of the Study}{3}{section.17}%
-\contentsline {section}{\numberline {1.4}Scope and Limitations}{4}{section.25}%
-\contentsline {section}{\numberline {1.5}Organization of the Thesis}{5}{section.26}%
-\contentsline {chapter}{\numberline {2}Literature Review}{7}{chapter.27}%
-\contentsline {section}{\numberline {2.1}The University Timetabling Problem (UTP)}{7}{section.28}%
-\contentsline {subsection}{\numberline {2.1.1}Constraint Satisfaction and Complexity}{7}{subsection.29}%
-\contentsline {section}{\numberline {2.2}Algorithmic Approaches to Timetabling}{9}{section.30}%
-\contentsline {subsection}{\numberline {2.2.1}Exact Methods}{9}{subsection.31}%
-\contentsline {subsection}{\numberline {2.2.2}Heuristic and Meta-Heuristic Algorithms}{9}{subsection.32}%
-\contentsline {section}{\numberline {2.3}Evolution of Timetable Management Systems}{10}{section.33}%
-\contentsline {subsection}{\numberline {2.3.1}Legacy Systems: Spreadsheets and Desktop Applications}{10}{subsection.34}%
-\contentsline {subsection}{\numberline {2.3.2}Modern Web-Based Architectures}{11}{subsection.35}%
-\contentsline {section}{\numberline {2.4}Identification of Gaps in Existing Solutions}{12}{section.36}%
-\contentsline {chapter}{\numberline {3}Technologies and Frameworks}{14}{chapter.38}%
-\contentsline {section}{\numberline {3.1}Frontend Architecture: React 19 and TypeScript}{15}{section.40}%
-\contentsline {subsection}{\numberline {3.1.1}React 19}{15}{subsection.42}%
-\contentsline {subsection}{\numberline {3.1.2}TypeScript}{16}{subsection.43}%
-\contentsline {section}{\numberline {3.2}Build Tooling: Vite}{17}{section.44}%
-\contentsline {section}{\numberline {3.3}Styling: Tailwind CSS}{18}{section.45}%
-\contentsline {section}{\numberline {3.4}Backend Infrastructure: Supabase}{19}{section.46}%
-\contentsline {subsection}{\numberline {3.4.1}PostgreSQL}{19}{subsection.47}%
-\contentsline {subsection}{\numberline {3.4.2}Supabase Client and Row Level Security (RLS)}{19}{subsection.48}%
-\contentsline {subsection}{\numberline {3.4.3}Authentication}{20}{subsection.49}%
-\contentsline {section}{\numberline {3.5}External Integrations}{20}{section.50}%
-\contentsline {subsection}{\numberline {3.5.1}Excel Parsing (SheetJS / xlsx)}{20}{subsection.51}%
-\contentsline {subsection}{\numberline {3.5.2}Google Sheets API integration}{20}{subsection.52}%
-\contentsline {subsection}{\numberline {3.5.3}PDF Generation (html-to-image and jsPDF)}{21}{subsection.53}%
-\contentsline {section}{\numberline {3.6}Solver Engine: Pure TypeScript Architecture}{22}{section.54}%
-\contentsline {chapter}{\numberline {4}System Architecture and Design}{24}{chapter.55}%
-\contentsline {section}{\numberline {4.1}Application Topology}{24}{section.56}%
-\contentsline {section}{\numberline {4.2}Database Schema Design}{25}{section.57}%
-\contentsline {subsection}{\numberline {4.2.1}Core Entities}{25}{subsection.58}%
-\contentsline {subsection}{\numberline {4.2.2}The Central Hub: \texttt {timetable\_slots}}{26}{subsection.60}%
-\contentsline {subsection}{\numberline {4.2.3}Generator and Solver Support Entities}{27}{subsection.62}%
-\contentsline {subsection}{\numberline {4.2.4}Solver Data Model: Class Diagram}{28}{subsection.63}%
-\contentsline {section}{\numberline {4.3}The Data Ingestion Pipeline}{28}{section.65}%
-\contentsline {section}{\numberline {4.4}View Routing and State Management}{31}{section.72}%
-\contentsline {chapter}{\numberline {5}Implementation and Results}{32}{chapter.73}%
-\contentsline {section}{\numberline {5.1}Dynamic Time Grid Generation}{32}{section.74}%
-\contentsline {section}{\numberline {5.2}Multi-Dimensional Clash Detection Algorithm}{33}{section.80}%
-\contentsline {section}{\numberline {5.3}Inverted Logic: The Free Room Finder}{34}{section.83}%
-\contentsline {section}{\numberline {5.4}React Component Hierarchy}{36}{section.89}%
-\contentsline {section}{\numberline {5.5}Role-Based Viewer Implementations}{36}{section.91}%
-\contentsline {subsection}{\numberline {5.5.1}Student Cohort View}{37}{subsection.93}%
-\contentsline {subsection}{\numberline {5.5.2}Master Occupancy Viewer}{37}{subsection.94}%
-\contentsline {section}{\numberline {5.6}Export Mechanisms and Results}{38}{section.95}%
-\contentsline {subsection}{\numberline {5.6.1}Client-Side PDF Generation}{38}{subsection.96}%
-\contentsline {subsection}{\numberline {5.6.2}Google Sheets API Export}{38}{subsection.97}%
-\contentsline {subsection}{\numberline {5.6.3}User Interface Evaluation}{38}{subsection.98}%
-\contentsline {section}{\numberline {5.7}The (1+1)-ES Timetable Solver}{39}{section.99}%
-\contentsline {subsection}{\numberline {5.7.1}Chromosome Representation}{39}{subsection.100}%
-\contentsline {subsection}{\numberline {5.7.2}Session Expansion: The 2+1 Lecture Format}{40}{subsection.102}%
-\contentsline {subsection}{\numberline {5.7.3}Fitness Function}{40}{subsection.103}%
-\contentsline {subsection}{\numberline {5.7.4}Hard Constraints}{41}{subsection.105}%
-\contentsline {subsection}{\numberline {5.7.5}Soft Constraints}{42}{subsection.107}%
-\contentsline {subsection}{\numberline {5.7.6}Mutation Operators}{42}{subsection.111}%
-\contentsline {subsection}{\numberline {5.7.7}$\sigma $-Adaptation: The 1/5th Success Rule}{43}{subsection.117}%
-\contentsline {subsection}{\numberline {5.7.8}Stagnation Restart}{44}{subsection.119}%
-\contentsline {subsection}{\numberline {5.7.9}Locked Sessions and Cross-Semester Awareness}{44}{subsection.120}%
-\contentsline {subsection}{\numberline {5.7.10}Solver Execution Flow}{44}{subsection.121}%
-\contentsline {section}{\numberline {5.8}The Interactive Timetable Editor}{45}{section.131}%
-\contentsline {subsection}{\numberline {5.8.1}Drag-and-Drop Slot Rearrangement}{45}{subsection.132}%
-\contentsline {subsection}{\numberline {5.8.2}Inline Editing}{47}{subsection.133}%
-\contentsline {subsection}{\numberline {5.8.3}Real-Time Conflict Visualization}{47}{subsection.134}%
-\contentsline {subsection}{\numberline {5.8.4}Feasibility Check}{47}{subsection.135}%
-\contentsline {subsection}{\numberline {5.8.5}LNS Auto-Fix}{47}{subsection.136}%
-\contentsline {subsection}{\numberline {5.8.6}Master View}{48}{subsection.142}%
-\contentsline {section}{\numberline {5.9}The Generator Wizard}{48}{section.143}%
-\contentsline {subsection}{\numberline {5.9.1}Step 1: Cluster Selection}{50}{subsection.144}%
-\contentsline {subsection}{\numberline {5.9.2}Step 2: Home Room Mapping}{50}{subsection.145}%
-\contentsline {subsection}{\numberline {5.9.3}Step 3: Professor Assignment Matrix}{50}{subsection.146}%
-\contentsline {subsection}{\numberline {5.9.4}Step 4: Seed and Lock Configuration}{51}{subsection.147}%
-\contentsline {subsection}{\numberline {5.9.5}Step 5: Solver Execution and Results}{51}{subsection.148}%
-\contentsline {subsection}{\numberline {5.9.6}End-to-End Sequence Diagram}{51}{subsection.149}%
-\contentsline {chapter}{\numberline {6}Conclusion and Future Work}{53}{chapter.151}%
-\contentsline {section}{\numberline {6.1}Summary of Contributions}{53}{section.152}%
-\contentsline {section}{\numberline {6.2}Current Limitations and Proposed Enhancements}{55}{section.153}%
-\contentsline {section}{\numberline {6.3}Concluding Remarks}{55}{section.155}%
-\contentsline {chapter}{\numberline {A}Core Algorithm Snippets}{58}{appendix.156}%
-\contentsline {section}{\numberline {A.1}Dynamic Grid Generation Logic}{58}{section.157}%
-\contentsline {section}{\numberline {A.2}Real-Time Clash Detection Filter}{58}{section.185}%
-\contentsline {section}{\numberline {A.3}Solver Fitness Evaluation Function}{59}{section.213}%
-\contentsline {section}{\numberline {A.4}(1+1)-ES Solver Main Loop}{60}{section.259}%
-\contentsline {section}{\numberline {A.5}LNS Auto-Fix for the Editor}{61}{section.321}%
+\contentsline {chapter}{List of Figures}{vii}{chapter*.10}%
+\contentsline {chapter}{List of Tables}{viii}{chapter*.11}%
+\contentsline {chapter}{\numberline {1}Introduction}{1}{chapter.12}%
+\contentsline {section}{\numberline {1.1}Background and Motivation}{1}{section.13}%
+\contentsline {section}{\numberline {1.2}Problem Statement}{2}{section.14}%
+\contentsline {section}{\numberline {1.3}Objectives of the Study}{3}{section.15}%
+\contentsline {section}{\numberline {1.4}Scope and Limitations}{5}{section.23}%
+\contentsline {section}{\numberline {1.5}Organization of the Thesis}{5}{section.24}%
+\contentsline {chapter}{\numberline {2}Literature Review}{7}{chapter.25}%
+\contentsline {section}{\numberline {2.1}The University Timetabling Problem (UTP)}{7}{section.26}%
+\contentsline {subsection}{\numberline {2.1.1}Constraint Satisfaction and Complexity}{7}{subsection.27}%
+\contentsline {section}{\numberline {2.2}Algorithmic Approaches to Timetabling}{9}{section.28}%
+\contentsline {subsection}{\numberline {2.2.1}Exact Methods}{9}{subsection.29}%
+\contentsline {subsection}{\numberline {2.2.2}Heuristic and Meta-Heuristic Algorithms}{9}{subsection.30}%
+\contentsline {section}{\numberline {2.3}Evolution of Timetable Management Systems}{10}{section.31}%
+\contentsline {subsection}{\numberline {2.3.1}Legacy Systems: Spreadsheets and Desktop Applications}{10}{subsection.32}%
+\contentsline {subsection}{\numberline {2.3.2}Modern Web-Based Architectures}{11}{subsection.33}%
+\contentsline {section}{\numberline {2.4}Identification of Gaps in Existing Solutions}{12}{section.34}%
+\contentsline {chapter}{\numberline {3}Technologies and Frameworks}{14}{chapter.36}%
+\contentsline {section}{\numberline {3.1}Frontend Architecture: React 19 and TypeScript}{14}{section.38}%
+\contentsline {subsection}{\numberline {3.1.1}Performance and Data Reliability}{15}{subsection.40}%
+\contentsline {section}{\numberline {3.2}Build and Styling: Vite and Tailwind CSS}{16}{section.41}%
+\contentsline {section}{\numberline {3.3}Backend and Data Ingestion: Supabase}{16}{section.42}%
+\contentsline {section}{\numberline {3.4}Solver Engine: Pure TypeScript Architecture}{17}{section.43}%
+\contentsline {section}{\numberline {3.5}External Integrations: Reporting and Export}{17}{section.44}%
+\contentsline {chapter}{\numberline {4}System Architecture and Design}{19}{chapter.45}%
+\contentsline {section}{\numberline {4.1}Application Topology}{19}{section.46}%
+\contentsline {section}{\numberline {4.2}Database Schema Design}{20}{section.47}%
+\contentsline {subsection}{\numberline {4.2.1}Core Entities}{20}{subsection.48}%
+\contentsline {subsection}{\numberline {4.2.2}The Central Hub: \texttt {timetable\_slots}}{21}{subsection.50}%
+\contentsline {subsection}{\numberline {4.2.3}Generator and Solver Support Entities}{22}{subsection.52}%
+\contentsline {subsection}{\numberline {4.2.4}Solver Data Model: Class Diagram}{23}{subsection.53}%
+\contentsline {section}{\numberline {4.3}The Data Ingestion Pipeline}{23}{section.55}%
+\contentsline {section}{\numberline {4.4}View Routing and State Management}{26}{section.62}%
+\contentsline {chapter}{\numberline {5}Implementation and Results}{27}{chapter.63}%
+\contentsline {section}{\numberline {5.1}Dynamic Time Grid Generation}{27}{section.64}%
+\contentsline {section}{\numberline {5.2}Multi-Dimensional Clash Detection Algorithm}{28}{section.70}%
+\contentsline {section}{\numberline {5.3}Inverted Logic: The Free Room Finder}{29}{section.73}%
+\contentsline {section}{\numberline {5.4}React Component Hierarchy}{31}{section.79}%
+\contentsline {section}{\numberline {5.5}Role-Based Viewer Implementations}{31}{section.81}%
+\contentsline {subsection}{\numberline {5.5.1}Student Cohort View}{32}{subsection.83}%
+\contentsline {subsection}{\numberline {5.5.2}Master Occupancy Viewer}{32}{subsection.84}%
+\contentsline {section}{\numberline {5.6}Export Mechanisms and Results}{33}{section.85}%
+\contentsline {subsection}{\numberline {5.6.1}Client-Side PDF Generation}{33}{subsection.86}%
+\contentsline {subsection}{\numberline {5.6.2}Google Sheets API Export}{33}{subsection.87}%
+\contentsline {subsection}{\numberline {5.6.3}User Interface Evaluation}{33}{subsection.88}%
+\contentsline {section}{\numberline {5.7}The (1+1)-ES Timetable Solver}{34}{section.89}%
+\contentsline {subsection}{\numberline {5.7.1}Chromosome Representation}{34}{subsection.90}%
+\contentsline {subsection}{\numberline {5.7.2}Session Expansion: The 2+1 Lecture Format}{35}{subsection.92}%
+\contentsline {subsection}{\numberline {5.7.3}Fitness Function}{35}{subsection.93}%
+\contentsline {subsection}{\numberline {5.7.4}Hard Constraints}{36}{subsection.95}%
+\contentsline {subsection}{\numberline {5.7.5}Soft Constraints}{37}{subsection.97}%
+\contentsline {subsection}{\numberline {5.7.6}Mutation Operators}{37}{subsection.101}%
+\contentsline {subsection}{\numberline {5.7.7}$\sigma $-Adaptation: The 1/5th Success Rule}{38}{subsection.107}%
+\contentsline {subsection}{\numberline {5.7.8}Stagnation Restart}{39}{subsection.109}%
+\contentsline {subsection}{\numberline {5.7.9}Locked Sessions and Cross-Semester Awareness}{39}{subsection.110}%
+\contentsline {subsection}{\numberline {5.7.10}Solver Execution Flow}{39}{subsection.111}%
+\contentsline {section}{\numberline {5.8}The Interactive Timetable Editor}{40}{section.121}%
+\contentsline {subsection}{\numberline {5.8.1}Drag-and-Drop Slot Rearrangement}{40}{subsection.122}%
+\contentsline {subsection}{\numberline {5.8.2}Inline Editing}{42}{subsection.123}%
+\contentsline {subsection}{\numberline {5.8.3}Real-Time Conflict Visualization}{42}{subsection.124}%
+\contentsline {subsection}{\numberline {5.8.4}Feasibility Check}{42}{subsection.125}%
+\contentsline {subsection}{\numberline {5.8.5}LNS Auto-Fix}{42}{subsection.126}%
+\contentsline {subsection}{\numberline {5.8.6}Master View}{43}{subsection.132}%
+\contentsline {section}{\numberline {5.9}The Intelligent Generator}{43}{section.133}%
+\contentsline {subsection}{\numberline {5.9.1}Step 1: Cluster Selection}{45}{subsection.134}%
+\contentsline {subsection}{\numberline {5.9.2}Step 2: Home Room Mapping}{45}{subsection.135}%
+\contentsline {subsection}{\numberline {5.9.3}Step 3: Professor Assignment Matrix}{45}{subsection.136}%
+\contentsline {subsection}{\numberline {5.9.4}Step 4: Seed and Lock Configuration}{46}{subsection.137}%
+\contentsline {subsection}{\numberline {5.9.5}Step 5: Solver Execution and Results}{46}{subsection.138}%
+\contentsline {subsection}{\numberline {5.9.6}End-to-End Sequence Diagram}{46}{subsection.139}%
+\contentsline {chapter}{\numberline {6}Conclusion and Future Work}{48}{chapter.141}%
+\contentsline {section}{\numberline {6.1}Summary of Contributions}{48}{section.142}%
+\contentsline {section}{\numberline {6.2}Current Limitations and Proposed Enhancements}{50}{section.143}%
+\contentsline {section}{\numberline {6.3}Concluding Remarks}{50}{section.145}%
+\contentsline {chapter}{\numberline {A}Core Algorithm Snippets}{53}{appendix.146}%
+\contentsline {section}{\numberline {A.1}Dynamic Grid Generation Logic}{53}{section.147}%
+\contentsline {section}{\numberline {A.2}Real-Time Clash Detection Filter}{53}{section.175}%
+\contentsline {section}{\numberline {A.3}Solver Fitness Evaluation Function}{54}{section.203}%
+\contentsline {section}{\numberline {A.4}(1+1)-ES Solver Main Loop}{55}{section.249}%
+\contentsline {section}{\numberline {A.5}LNS Auto-Fix for the Editor}{56}{section.311}%

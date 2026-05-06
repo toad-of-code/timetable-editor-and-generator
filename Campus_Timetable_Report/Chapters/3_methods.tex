@@ -1,29 +1,25 @@
 % Chapter 3
-
 \chapter{Technologies and Frameworks} % Main chapter title
-
-\label{Chapter3} % For referencing the chapter elsewhere, use \ref{Chapter3}
+\label{Chapter3}
 
 %----------------------------------------------------------------------------------------
 
-The development of the IIITA Timetabling System required the selection of a modern, robust, and highly scalable technology stack. This chapter details the technical foundation upon which the system is built. It provides an in-depth analysis of the frontend frameworks, styling methodologies, backend services, external Application Programming Interfaces (APIs), and the solver engine architecture integrated into the project.
+The IIITA Timetabling System utilizes a modern, browser-based stack selected to prioritize high-performance data processing and strict referential integrity. This chapter outlines the technical foundation, focusing on tools that facilitate complex client-side computation and the normalization of legacy institutional data.
 
 \begin{table}[htbp]
 \centering
 \caption{Summary of the Technology Stack}
 \label{tab:tech_stack}
-\renewcommand{\arraystretch}{1.3} % Increase row height for better readability
+\renewcommand{\arraystretch}{1.3}
 \begin{tabularx}{\textwidth}{@{} l l X @{}}
 \toprule
-\textbf{Layer} & \textbf{Technology} & \textbf{Primary Function} \\
+\textbf{Layer} & \textbf{Technology} & \textbf{Primary Function in TTGen} \\
 \midrule
-Frontend Framework & React 19 & Component-based UI rendering and virtual DOM management \\
-Programming Language & TypeScript & Static typing for interfaces and error reduction \\
-Build Tool & Vite & Fast hot-module replacement and optimized asset bundling \\
-Styling & Tailwind CSS & Utility-first styling for rapid, responsive UI development \\
-Database / Backend & PostgreSQL (Supabase) & Relational data storage with referential integrity \\
-Authentication & Supabase Auth & Secure user session management \\
-External APIs & Google Sheets API & Formatted data export to external workbooks \\
+Frontend Framework & React 19 & Rendering dense, interactive 5-day time grids. \\
+Programming Language & TypeScript & Enforcing strict data contracts for slots and genes. \\
+Database & PostgreSQL & Maintaining integrity across rooms, faculty, and subjects. \\
+Backend / BaaS & Supabase & API gateway and secure database interfacing. \\
+Excel Parsing & SheetJS (xlsx) & Heuristic extraction of semantic meaning from legacy files. \\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -55,104 +51,60 @@ External APIs & Google Sheets API & Formatted data export to external workbooks 
 \label{fig:system_architecture}
 \end{figure}
 
-The user interface (UI) represents the critical interaction layer for all stakeholders—students, faculty, and administrators. A timetable application is inherently data-heavy, requiring the rendering of complex, dense grids that must update instantly based on user input (such as filtering by specific sections or switching between professor views). To achieve this fluidity, a Component-Based Architecture was adopted.
+The UI is designed to manage high-density data interactions without performance degradation. To achieve this, the system leverages React's virtual DOM and TypeScript's static typing.
 
-\subsection{React 19}
-React, maintained by Meta, is a premier JavaScript library for building user interfaces. It was selected as the core frontend framework for this project due to its declarative nature and the efficiency of the Virtual Document Object Model (Virtual DOM). 
-
-In a traditional web application, frequent updates to complex tables (such as a 5-day by 10-hour timetable grid) directly manipulate the browser's Document Object Model (DOM), an operation that is computationally expensive and slow. React mitigates this by maintaining a lightweight, in-memory representation of the UI (the Virtual DOM). When state changes—for instance, when a student toggles an elective subject off—React computes the exact difference (the "diff") between the previous Virtual DOM and the new one. It then batches these changes and updates only the specific DOM nodes that changed, ensuring high-performance rendering even with dense tabular data.
-
-The project utilizes React 19, taking advantage of modern paradigms such as Hooks (`useState`, `useEffect`, `useMemo`). The `useMemo` hook, in particular, proved vital for performance optimization. It allows the application to memoize the results of expensive computational tasks—such as parsing the timetable array to detect multidimensional clashes—ensuring these calculations only run when the underlying timetable data changes, rather than on every single render cycle.
-
-\subsection{TypeScript}
-While JavaScript is the native language of the web, it is dynamically typed, which can lead to significant runtime errors in complex applications. To ensure code reliability and maintainability, the entire frontend was developed using TypeScript.
-
-TypeScript is a syntactic superset of JavaScript that adds static typing. In the context of the timetable management system, TypeScript allowed for the rigid definition of data interfaces. For example, the `ParsedSlot` interface strictly defines that every parsed timetable entry must possess a string for the subject code, an integer for the day of the week, and specific enumerated types for the slot nature (e.g., 'Lecture', 'Tutorial', 'Practical'). 
+\subsection{Performance and Data Reliability}
+The system employs the \texttt{useMemo} hook to memoize expensive computations—such as $O(N^2)$ clash detection—ensuring these logic-heavy tasks only execute when the underlying timetable data changes. TypeScript is used to define rigid data interfaces, such as the \texttt{ParsedSlot}, ensuring the heuristic Excel parser outputs structured, predictable data.
 
 \begin{verbatim}
-// Example TypeScript Interface
+// Example TypeScript Interface for Solver Data Contracts
 interface ParsedSlot {
     id: string;
     day: string;
     startTime: string;
-    endTime: string;
     subjectCode: string;
     type: 'Lecture' | 'Tutorial' | 'Practical';
-    facultyName: string;
     roomName: string;
     section: string;
 }
 \end{verbatim}
 
-By enforcing these data contracts at compile-time, TypeScript eradicated an entire class of common errors related to undefined object properties or type mismatches, which is exceptionally beneficial when dealing with the unpredictable outputs of the heuristic Excel parser.
-
 %-----------------------------------
-\section{Build Tooling: Vite}
+\section{Build and Styling: Vite and Tailwind CSS}
 
-Historically, large React applications relied on Webpack as a build tool and module bundler. However, Webpack's build times and hot-module-replacement (HMR) speeds scale linearly with the size of the application, leading to sluggish developer experiences in extensive projects.
-
-This project utilizes \textbf{Vite} (French for "fast") as its build tool. Vite fundamentally shifts the development paradigm by leveraging native ES Modules in the browser. Rather than crawling, building, and bundling the entire application before the server can start, Vite pre-optimizes dependencies using esbuild (written in Go) and serves source code directly to the browser on demand. This results in near-instantaneous server starts and lightning-fast HMR, regardless of the application's complexity. For a project heavily reliant on rapid UI iteration—such as tweaking the dynamic time column generation algorithm for the viewer components—Vite significantly accelerated the development lifecycle.
-
-%-----------------------------------
-\section{Styling: Tailwind CSS}
-
-To achieve a professional, modern, and responsive aesthetic without the overhead of maintaining vast, complex CSS stylesheets, the project employs \textbf{Tailwind CSS}. 
-
-Unlike traditional semantic CSS frameworks (like Bootstrap) that provide pre-designed components (e.g., `.btn-primary`), Tailwind is a utility-first CSS framework. It provides low-level utility classes that map directly to underlying CSS properties (e.g., `flex`, `pt-4`, `text-center`, `rotate-90`). 
-
-This approach proved highly advantageous for rendering the timetable grid:
+The development workflow and visual layer are optimized for rapid iteration and dynamic feedback.
 \begin{itemize}
-    \item \textbf{Colocation of Concerns:} Styling is applied directly within the React JSX components. This ensures that the structural logic (HTML), behavioral logic (JavaScript), and presentation logic (CSS) for a component—such as an individual timetable cell—reside in exactly the same place, drastically improving code readability.
-    \item \textbf{Dynamic Styling:} Utility classes can be easily concatenated conditionally using JavaScript. For instance, the system dynamically assigns text colors based on the slot type: `text-orange-600` for practicals, `text-green-800` for tutorials, and black for standard lectures.
-    \item \textbf{Performance:} The project utilizes the Vite plugin for Tailwind CSS v4, which scans the source code and generates a minimal CSS file containing only the utility classes actually used in the application, ensuring minimal network payloads in production.
+    \item \textbf{Vite:} Leverages native ES Modules for near-instantaneous hot-module replacement (HMR), critical during the refinement of grid-generation algorithms.
+    \item \textbf{Tailwind CSS:} A utility-first framework that allows the system to dynamically apply visual alerts, such as red ring borders for clashing sessions, directly within the React components.
 \end{itemize}
 
 %-----------------------------------
-\section{Backend Infrastructure: Supabase}
+\section{Backend and Data Ingestion: Supabase}
 
-Rather than developing a custom backend server using Node.js or Python from scratch, the project leverages \textbf{Supabase}, an open-source alternative to Firebase. Supabase provides a suite of Backend-as-a-Service (BaaS) tools built atop a dedicated PostgreSQL database.
-
-\subsection{PostgreSQL}
-At the core of Supabase is PostgreSQL, an advanced, enterprise-grade open-source relational database. A relational model is essential for a timetabling system, which fundamentally consists of interconnected entities: subjects, professors, rooms, and student groups. PostgreSQL enforces referential integrity through foreign key constraints, ensuring, for example, that a timetable slot cannot be assigned to a room that does not exist in the master rooms table.
-
-\subsection{Supabase Client and Row Level Security (RLS)}
-Supabase provides an auto-generated, RESTful Data API derived directly from the PostgreSQL schema. The React frontend interacts with the database using the `@supabase/supabase-js` client library. This allows for rapid data fetching and mutation directly from the client without the need to manually construct API endpoints.
-
-To ensure data security when communicating directly from the client, Supabase utilizes PostgreSQL's native Row Level Security (RLS). While not strictly enforced in the current developmental phase, the architecture supports strict RLS policies. This ensures that while unauthenticated students can query the \texttt{timetable\_slots} to view their schedules, only authenticated administrative users hold the necessary permissions to \texttt{INSERT} or \texttt{DELETE} records via the Excel parsing module.
-
-\subsection{Authentication}
-Authentication is managed natively by Supabase Auth. The system currently supports standard Email/Password authentication. The authentication state is managed globally within the React application using an `AuthContext` provider, which wraps the main application shell and dynamically routes users to either the login form or the main dashboard based on their session status.
-
-%-----------------------------------
-\section{External Integrations}
-
-\subsection{Excel Parsing (SheetJS / xlsx)}
-To bridge the gap between traditional administrative workflows and the new digital platform, the system must process raw `.xlsx` files. This is achieved using the `xlsx` (SheetJS) library. SheetJS is a highly robust JavaScript library capable of reading complex spreadsheet binaries directly in the browser. It parses the workbook into a JSON array of arrays, which the custom heuristic engine within the `TimetableImporter` component then processes to extract semantic meaning.
-
-\subsection{Google Sheets API integration}
-While the primary viewing experience is web-based, administrators often require the ability to manipulate data further or share raw schedules externally. To support this, the project integrates with the \textbf{Google Sheets API v4}.
-
-Using an implementation centered around the `useGoogleSheets` custom React hook, the application utilizes the Google Identity Services (GSI) OAuth 2.0 client. Upon administrator authorization, the system constructs a complex JSON payload that not only creates a new Google Spreadsheet containing the schedule data but also transmits detailed batch update requests. These updates apply professional formatting directly via the API, including freezing header rows, applying pink background colors to headers, enforcing solid borders, and setting bold typography. This level of integration ensures that the exported data is immediately presentable and formatted according to institutional standards.
-
-\subsection{PDF Generation (html-to-image and jsPDF)}
-For localized, immediate offline access, every viewer component supports PDF export. This is implemented via a two-step client-side process:
-1. \textbf{`html-to-image`}: This library captures a snapshot of the specific React component (the DOM node representing the timetable grid) and converts it into a high-fidelity base64 PNG image. A critical technical implementation detail involves temporarily overriding sticky CSS headers during the capture process to ensure the entire scrolling grid is captured accurately.
-2. \textbf{`jsPDF`}: The generated PNG image is then injected into a PDF document canvas utilizing the `jsPDF` library. The resulting document is automatically downloaded to the user's local machine, providing a quick, formatted snapshot of the current view.
+The system replaces static files with a centralized PostgreSQL database hosted on Supabase, ensuring referential integrity through foreign key constraints.
+\begin{itemize}
+    \item \textbf{Heuristic Parsing:} The \texttt{xlsx} (SheetJS) library is used to read raw institutional spreadsheets. These are processed by a custom engine to extract semantic meaning, such as L-T-P credit structures and complex faculty assignments.
+    \item \textbf{Authentication:} Secure access for administrators is managed natively by Supabase Auth, with state handled via a global \texttt{AuthContext} provider.
+\end{itemize}
 
 %-----------------------------------
 \section{Solver Engine: Pure TypeScript Architecture}
 
-A key architectural decision for the automated timetable generator was to implement the entire solver engine in pure TypeScript, running directly in the browser. This eliminates the need for an external optimizer service, a dedicated server-side process, or any third-party optimization library. The solver module resides in the \texttt{src/solver/} directory and is organized into the following submodules:
+The core contribution of this system is its pure-TypeScript solver engine, which runs directly in the browser. This eliminates the need for server-side optimization and allows for real-time schedule generation. The solver is organized into discrete submodules:
 
 \begin{itemize}
-    \item \textbf{\texttt{types.ts}} --- Defines the core data structures: \texttt{ClassSession} (a single schedulable event), \texttt{Gene} (the allele encoding day, startBucket, and roomIndex), \texttt{Solution} (an array of Genes representing a complete timetable), \texttt{SolverConfig} (hyperparameters such as weights and thresholds), and \texttt{FitnessResult} (the evaluated quality of a solution).
-    \item \textbf{\texttt{constants.ts}} --- Encodes the institutional time model: 8 one-hour slots per day, break boundaries after slots 2 and 4, slot-to-time mappings, and the definition of synced elective baskets (e.g., HSMC, MDM).
-    \item \textbf{\texttt{dataPrep.ts}} --- Transforms UI-level configuration (subjects with L-T-P counts, student groups, professor assignments) into the flat \texttt{ClassSession[]} array consumed by the solver. Implements the 2+1 lecture expansion rule and builds locked sessions from published timetables.
-    \item \textbf{\texttt{constraints.ts}} --- Evaluates a candidate solution against all ten hard constraints and three soft constraints, returning a comprehensive \texttt{FitnessResult} with a per-constraint violation breakdown.
-    \item \textbf{\texttt{mutations.ts}} --- Provides five mutation operators (day reassignment, Gaussian time shift with break snapping, type-aware room reassignment, swap, and full relocate) and the initial solution generator with round-robin day balancing and cross-basket anti-clash placement.
-    \item \textbf{\texttt{solver.ts}} --- Implements the main (1+1)-ES optimization loop with elitist selection, $\sigma$-adaptation via the 1/5th success rule, stagnation restart, and asynchronous batched execution.
-    \item \textbf{\texttt{localSearch.ts}} --- Provides the Large Neighbourhood Search (LNS) engine used by the Timetable Editor for targeted clash resolution.
-    \item \textbf{\texttt{solverLog.ts}} --- Generates comprehensive diagnostic log files documenting the solver's input, performance, fitness, detailed violation report, and day-by-day schedule.
+    \item \textbf{\texttt{dataPrep.ts}}: Expands high-level credits into individual sessions and applies the 2+1 lecture format.
+    \item \textbf{\texttt{constraints.ts}}: Evaluates solutions against ten hard and three soft constraints.
+    \item \textbf{\texttt{mutations.ts}}: Implements five mutation operators, including day reassignment and Gaussian time shifts.
+    \item \textbf{\texttt{solver.ts}}: Manages the (1+1)-ES loop, elitist selection, and stagnation restarts.
+    \item \textbf{\texttt{localSearch.ts}}: Provides the LNS auto-fix routine for the interactive editor.
 \end{itemize}
 
-This modular architecture ensures that each concern (data preparation, constraint evaluation, mutation, and optimization control) is cleanly separated, facilitating independent testing and future extension.
+%-----------------------------------
+\section{External Integrations: Reporting and Export}
+
+To support administrative workflows, the system integrates with external reporting tools:
+\begin{itemize}
+    \item \textbf{Google Sheets API:} Exports formatted schedules with frozen headers and color-coded session types directly to Google Drive.
+    \item \textbf{PDF Generation:} Captures high-fidelity snapshots of the timetable grid using \texttt{html-to-image} and \texttt{jsPDF} for immediate offline use.
+\end{itemize}

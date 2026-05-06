@@ -6,7 +6,7 @@
 
 %----------------------------------------------------------------------------------------
 
-This is where everything comes together. In this chapter, we walk through the key algorithms and interfaces we built for the IIITA Timetabling System---from the dynamic grid rendering and real-time conflict detection, through to the (1+1)-ES solver, the interactive drag-and-drop editor, and the multi-step Generator Wizard. Along the way, we explain the design decisions we made and why.
+This is where everything comes together. In this chapter, we walk through the key algorithms and interfaces we built for the IIITA Timetabling System---from the dynamic grid rendering and real-time conflict detection, through to the (1+1)-ES solver, the interactive drag-and-drop editor, and the multi-step Intelligent Generator. Along the way, we explain the design decisions we made and why.
 
 %-----------------------------------
 \section{Dynamic Time Grid Generation}
@@ -452,7 +452,7 @@ The LNS targets only the problematic sessions rather than reoptimizing the entir
 The editor includes a ``Master View'' toggle that fetches and overlays all slots from other published timetables as read-only, semi-transparent cards in the grid. This provides cross-semester situational awareness, allowing the administrator to visually verify that no room or professor conflicts exist between the current draft and previously published schedules.
 
 %-----------------------------------
-\section{The Generator Wizard}
+\section{The Intelligent Generator}
 \label{sec:generator}
 
 The \texttt{GeneratorView} component is the front door to the solver. It walks administrators through a guided, step-by-step configuration process that collects all the information the solver needs before launching the optimisation.
@@ -496,7 +496,7 @@ Upon clicking ``Generate Timetable,'' the system constructs the \texttt{SolverIn
 
 \subsection{End-to-End Sequence Diagram}
 
-Figure~\ref{fig:generator_sequence} illustrates the complete interaction sequence between the administrator, the Generator Wizard UI, the database, and the solver engine during an automated timetable generation session.
+Figure~\ref{fig:generator_sequence} illustrates the complete interaction sequence between the administrator, the Intelligent Generator UI, the database, and the solver engine during an automated timetable generation session.
 
 \begin{figure}[htbp]
 \centering
@@ -553,6 +553,6 @@ Figure~\ref{fig:generator_sequence} illustrates the complete interaction sequenc
 
 \end{tikzpicture}
 }%
-\caption{Sequence Diagram: End-to-End Generator Wizard Workflow}
+\caption{Sequence Diagram: End-to-End Intelligent Generator Workflow}
 \label{fig:generator_sequence}
 \end{figure}

@@ -112,11 +112,11 @@ The \texttt{timetable\_slots} table is the heart of the schema---a massive junct
 \end{table}
 
 \subsection{Generator and Solver Support Entities}
-To support automated timetable generation, the schema includes three mapping tables (shown in green in Figure~\ref{fig:er_diagram}). These are used by the Generator Wizard and the solver engine:
+To support automated timetable generation, the schema includes three mapping tables (shown in green in Figure~\ref{fig:er_diagram}). These are used by the Intelligent Generator and the solver engine:
 \begin{itemize}
     \item \textbf{\texttt{semester\_clusters}:} Defines active academic clusters (e.g., Batch 2023, Semester 3, Department ``IT''). Attributes include \texttt{batch\_year}, \texttt{semester\_number}, \texttt{department}, and \texttt{is\_active}. The generator UI filters for active clusters and uses them to scope the scheduling problem.
     \item \textbf{\texttt{cluster\_requirements}:} A many-to-many join linking a cluster to the subjects that must be scheduled. Includes \texttt{elective\_basket} (the basket name for elective grouping) and \texttt{estimated\_enrollment} (used by the solver's room utilisation soft constraint).
-    \item \textbf{\texttt{professor\_expertise}:} Links professors to the subjects they are qualified to teach, along with a \texttt{preference\_level}. The auto-fill feature in the Generator Wizard uses this to intelligently suggest professor assignments.
+    \item \textbf{\texttt{professor\_expertise}:} Links professors to the subjects they are qualified to teach, along with a \texttt{preference\_level}. The auto-fill feature in the Intelligent Generator uses this to intelligently suggest professor assignments.
 \end{itemize}
 
 \subsection{Solver Data Model: Class Diagram}

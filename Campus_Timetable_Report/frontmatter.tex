@@ -17,9 +17,9 @@
 \vspace{7mm}
 \textsc{\huge \MakeUppercase{\degreename}}  % ← Uses degree from main.tex
 
-\vspace {3mm}
-% Logo display - no figure environment needed on title page
-\includegraphics[width=5cm]{Figures/IIITA_Logo.jpg}
+\vspace{3mm}
+% Logo display - centered on its own line
+{\includegraphics[width=5cm]{Figures/IIITA_LOGO_NOBG.png}}\par
 \vspace{5mm}
 % ************************************
 \begin{minipage}[t]{0.5\textwidth}
@@ -27,7 +27,7 @@
         \textit{By:-} \\%[2mm]
             \textsc{\studentnamesformatted} % ← Uses student names from main.tex
     \end{flushleft}
-\end{minipage}
+\end{minipage}%
 \begin{minipage}[t]{0.45\textwidth}
     \begin{flushright} \large
         \textit{Enrollment No.} \\
@@ -51,7 +51,7 @@
 \textsc{\Large \univname} % ← Uses university from main.tex
 
 \vspace{5mm}
-07/05/2026
+Wednesday 7\textsuperscript{th} May, 2026
 
 
 \end{spacing}
@@ -173,17 +173,17 @@ We affirm that due credit has been given to all original authors and sources thr
 
 \addchaptertocentry{\abstractname} % Add the abstract to the table of contents
 
-University timetabling is a notoriously difficult problem---it is NP-hard, and even small campuses must juggle hundreds of interacting constraints involving courses, professors, rooms, and student groups. At IIIT Allahabad, timetables were traditionally managed through spreadsheets, a process that was slow, error-prone, and impossible to scale. In this thesis, we present the ``IIITA Timetabling System,'' a web-based platform we built to automate and streamline the entire scheduling workflow.
+University timetabling is a complex problem, or rather, it is an NP-hard problem. Even small campuses have hundreds of constraints to schedule for: courses, professors, rooms, and groups of students. At IIIT Allahabad, the timetables were generated manually in spreadsheets, which was time-consuming, error-prone, and not scalable. In this thesis, we created the \`\`IIITA Timetabling System", a web-based solution to automate and digitise the entire timetable scheduling pipeline.
 
-Our system begins by tackling the messy reality of legacy data. We developed a heuristic-driven Excel parser that can read raw, unstructured timetable spreadsheets, pull out key information like subject codes, faculty names, and room numbers, and load everything into a cloud-based PostgreSQL database powered by Supabase.
+We implemented a heuristic-based Excel parser that can process raw, unstructured timetable Excel spreadsheets, extracting information such as subject codes, faculty names and room numbers, and loads them into a cloud-based PostgreSQL database using Supabase.
 
-The core contribution of this work is an automated timetable generator built on a (1+1) Evolution Strategy (ES). We model each timetable as a chromosome of Gene decisions (day, time-slot, room) and score candidates using a fitness function with ten hard constraints (covering room, professor, and group clashes, break boundaries, lab assignments, elective synchronisation, and more) plus three soft constraints (minimising student gaps, improving room utilisation, and keeping professors in a single half of the day). The algorithm adapts its step size using Rechenberg's 1/5th rule, restarts when it stagnates, and can warm-start from an existing schedule. To avoid conflicts across semesters, we inject locked sessions from previously published timetables.
+The main contribution is an automated timetable scheduler based on a (1+1) Evolution Strategy (ES). We represent a timetable as a chromosome with Gene decisions (day, time-slot, room) and evaluate candidate solutions using a fitness function with 10 hard constraints (room / professor / group clashes, break boundary limits, labs, elective synchronisation, etc.) and 3 soft constraints (minimising gaps for students, maximising room occupancy and keeping professors in one side of the day). The algorithm adjusts step sizes using Rechenberg’s classic 1/5th rule, restarts when trapped in local optimums and can be initialised with a given timetable. To prevent clashes across semesters, we populate already scheduled sessions from published timetables.
 
-Because no solver can anticipate every real-world preference, we also built an interactive drag-and-drop Timetable Editor. Administrators can rearrange sessions visually, see conflicts highlighted in real time, and run a one-click Large Neighbourhood Search (LNS) auto-fix to resolve remaining clashes. A Master View overlays slots from all published timetables so cross-semester conflicts are immediately visible.
+Since no solver can anticipate every conceivable real-world preference, we also provide a drag-and-drop Timetable Editor. Administrators can visually rearrange the sessions, with conflicts displayed in real-time, and LNS (Large Neighbourhood Search) auto-fix with one click. A Master View displays slots from all published timetables so conflicts across semesters are instantly apparent.
 
-For day-to-day use, the system offers tailored views for every stakeholder: a filtered student schedule, dedicated professor timetables, a campus-wide Master Occupancy grid, and a Free Room Finder. We also built a multi-step Generator Wizard that walks administrators through cluster selection, room mapping, professor assignment, and solver configuration before launching the engine.
+In daily life, however, the system allows customized views for each stakeholder, from the students’ view of their individual schedule to professors’ schedules and a master occupancy map for the entire university campus, plus the ability to find available rooms using our Free Room Finder module. In addition, we developed an extensive Intelligent Generator to guide administrators step-by-step.
 
-The entire application is built with React 19, TypeScript, and Tailwind CSS, giving it a responsive, modern feel. It integrates with the Google Sheets API for polished data export and supports local PDF generation. This thesis covers the theoretical background of the timetabling problem, the technology stack, the modular architecture, the evolutionary algorithm and its constraint system, and the interactive editing tools that together deliver a practical, real-time campus scheduling solution.
+React 19, TypeScript, and Tailwind CSS form the technology stack used throughout the application, making it very flexible and modern in design. The use of the Google Sheets API makes data export elegant, while PDF creation is possible locally as well. In the context of this thesis, topics such as the theoretical framework of the timetabling problem, the technology stack and architecture, evolutionary algorithm with constraints, and interactive editor components are discussed.
 
 \end{spacing}
 \end{abstract}
@@ -192,17 +192,17 @@ The entire application is built with React 19, TypeScript, and Tailwind CSS, giv
 %	ACKNOWLEDGEMENTS
 %----------------------------------------------------------------------------------------
 
-\begin{acknowledgements}
-\addchaptertocentry{\acknowledgementname} % Add the acknowledgements to the table of contents
+% \begin{acknowledgements}
+% \addchaptertocentry{\acknowledgementname} % Add the acknowledgements to the table of contents
 
-\vspace{1cm}
-We would like to express our sincere gratitude to our supervisor, \supname, for his continuous support, guidance, and encouragement throughout this research and development process. His insightful comments and technical suggestions have been invaluable in shaping this work.
+% \vspace{1cm}
+% We would like to express our sincere gratitude to our supervisor, \supname, for his continuous support, guidance, and encouragement throughout this research and development process. His insightful comments and technical suggestions have been invaluable in shaping this work.
 
-We are also grateful to the faculty members of the \deptname\ for their support during our studies. Special thanks to our colleagues and friends who provided a stimulating environment for learning and development.
+% We are also grateful to the faculty members of the \deptname\ for their support during our studies. Special thanks to our colleagues and friends who provided a stimulating environment for learning and development.
 
-Finally, we would like to thank our families for their unconditional love, support, and patience throughout our academic journey.
+% Finally, we would like to thank our families for their unconditional love, support, and patience throughout our academic journey.
 
-\end{acknowledgements}
+% \end{acknowledgements}
 
 %----------------------------------------------------------------------------------------
 %	LIST OF CONTENTS/FIGURES/TABLES PAGES

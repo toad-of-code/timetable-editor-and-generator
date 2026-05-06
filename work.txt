@@ -1,1 +1,6 @@
-1.room utilzation
+{Unstructured Data:} Our schedule is created in excel sheets with merged cells, non-matching names, and relations that are beyond any computer program’s comprehension.
+  {Manual Conflicts Management:} To check whether there are problems like clash of classrooms, unavailability of certain teachers or courses, one needs to do a whole process manually, hence increasing the possibility of error.
+{No Automated Scheduling:} Currently, there is no system to automatically create a non-conflict timetable according to the needs of our institution.
+{One Size Fits All Perspective:} It makes no sense to make a timetable which will not satisfy everyone. Students need to search in this timetable, and teachers cannot quickly find their schedules.
+{Resource Management:} Administrators lack a simple way of knowing which classrooms are vacant at certain times and how effectively our resources are being used.
+{Statically Distributed:} After publishing the timetable in pdf form, updating it means distributing it all over again.
