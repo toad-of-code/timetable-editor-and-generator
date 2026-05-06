@@ -6,7 +6,7 @@
 
 %----------------------------------------------------------------------------------------
 
-This chapter details the concrete implementation of the core algorithms and user interfaces that comprise the IIITA Timetabling System. It highlights the technical solutions developed to address the challenges outlined in previous chapters, specifically focusing on dynamic rendering, real-time conflict detection, personalized user views, the (1+1)-ES automated timetable solver, the interactive drag-and-drop Timetable Editor with LNS auto-fix, and the multi-step Generator Wizard. Finally, it discusses the results of these implementations through the lens of the final user interface.
+This is where everything comes together. In this chapter, we walk through the key algorithms and interfaces we built for the IIITA Timetabling System---from the dynamic grid rendering and real-time conflict detection, through to the (1+1)-ES solver, the interactive drag-and-drop editor, and the multi-step Generator Wizard. Along the way, we explain the design decisions we made and why.
 
 %-----------------------------------
 \section{Dynamic Time Grid Generation}
@@ -141,7 +141,7 @@ The system provides several specialized views tailored to different stakeholders
 \toprule
 \textbf{Stakeholder Role} & \textbf{Component View} & \textbf{Primary Filter Parameter} \\
 \midrule
-Student & \texttt{StudentCustomTimetable} & Semester \& Specific Section \\
+Student & \texttt{TimetableViewer} & Semester \& Specific Section \\
 Professor & \texttt{ProfessorTimetableViewer} & Faculty Email/ID \\
 Department Admin & \texttt{RoomTimetableViewer} & Specific Room Name \\
 Campus Admin & \texttt{MasterRoomViewer} & Building Prefix (e.g., "CC-3") \\
@@ -150,12 +150,10 @@ Facility Staff & \texttt{FreeRoomViewer} & Temporal Matrix (Empty Rooms) \\
 \end{tabularx}
 \end{table}
 
-\subsection{Student Custom Timetable}
-The student view is designed for maximum personalization. Given the complexity of modern curricula featuring numerous electives and minor tracks, a master timetable is overwhelming. The `StudentCustomTimetable` allows students to select their semester and specific section.
+\subsection{Student Cohort View}
+Given the complexity of modern curricula featuring numerous electives and minor tracks, a master timetable can be overwhelming. The \texttt{TimetableViewer} allows users to filter the master schedule by selecting a specific semester and section.
 
-Crucially, it implements a \textbf{Smart Merging algorithm}. Often, lectures are held for "All Sections" simultaneously, while practical laboratory sessions are split by specific section (e.g., "Sec A"). The merging algorithm intelligently filters the master data, pulling in slots explicitly assigned to the student's selected section \textit{and} slots assigned to the generic "All" section, combining them into a single, cohesive personal schedule.
-
-Students can further refine this by toggling specific elective subjects on or off using a sidebar checklist. These preferences are persisted in the browser's `localStorage`, ensuring their custom view is maintained across sessions without requiring dedicated student user accounts.
+Crucially, it implements a \textbf{Smart Merging algorithm}. Often, core lectures are held for "All Sections" simultaneously, while practical laboratory sessions are split by specific section (e.g., "Sec A"). The merging algorithm intelligently filters the master data, pulling in slots explicitly assigned to the selected section \textit{and} slots assigned to the generic "All" section (WMC), combining them into a single, cohesive cohort schedule.
 
 \subsection{Master Occupancy Viewer}
 For campus administrators, the `MasterRoomViewer` provides a macro-level perspective. It displays a dense grid where rows represent physical rooms rather than student groups. Because an institution may have hundreds of rooms, this view implements a building-level filter. The system extracts the building prefix from the room name (e.g., identifying "CC-3" from "CC-3-1001") and allows the administrator to filter the grid, rendering a manageable overview of specific campus zones.
@@ -183,7 +181,7 @@ The resulting application is a highly responsive, modern interface. By utilizing
 \section{The (1+1)-ES Timetable Solver}
 \label{sec:solver}
 
-The automated timetable generator is a central contribution of this project. It implements a (1+1) Evolution Strategy (ES)~\cite{rechenberg1973evolution,schwefel1995evolution} to search for conflict-free schedules that satisfy all institutional constraints. This section formalizes the problem representation, the fitness function, the mutation operators, and the adaptive control mechanisms.
+The automated timetable generator is the centrepiece of this project. We use a (1+1) Evolution Strategy (ES)~\cite{rechenberg1973evolution,schwefel1995evolution}---a simple but effective meta-heuristic---to search for conflict-free schedules. In the subsections that follow, we formalise the problem representation, describe how we score candidates, and explain the mutation and adaptation mechanisms that drive the search.
 
 \subsection{Chromosome Representation}
 
@@ -321,11 +319,60 @@ The solver runs asynchronously in the browser using batched \texttt{setTimeout} 
     \item Terminate on reaching the maximum generation count, achieving zero hard violations, or user cancellation.
 \end{enumerate}
 
+Figure~\ref{fig:solver_activity} visualizes this execution flow as a UML activity diagram.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    node distance=1.1cm,
+    start/.style={draw, circle, fill=black, minimum size=6pt, inner sep=0pt},
+    stop/.style={draw, circle, fill=black, minimum size=6pt, inner sep=0pt, double, double distance=1.5pt},
+    action/.style={draw, rectangle, fill=blue!8, rounded corners=3pt, text width=6cm, align=center, font=\sffamily\scriptsize, minimum height=0.6cm},
+    decision/.style={draw, diamond, aspect=2.5, fill=orange!10, text width=1.8cm, align=center, font=\sffamily\scriptsize, inner sep=1pt},
+    arrow/.style={draw, thick, ->, >=stealth, font=\sffamily\tiny}
+]
+
+\node[start] (s) {};
+\node[action, below=of s] (init) {Generate Initial Solution\\(round-robin day, break-aware slot)};
+\node[action, below=of init] (seed) {Apply Seed \& Pin Locked Genes};
+\node[action, below=of seed] (mutate) {Mutate Parent $\to$ Offspring\\(3--8\% of mutable sessions)};
+\node[action, below=of mutate] (eval) {Evaluate Offspring Fitness $f(S')$};
+\node[decision, below=of eval] (accept) {$f(S') \leq f(S)$\,?};
+\node[action, below left=1.2cm and 0.3cm of accept] (yes) {Accept Offspring\\Update Best Solution};
+\node[decision, below=2.2cm of accept] (sigma) {gen \% $W$ == 0\,?};
+\node[action, right=2.2cm of sigma] (adapt) {Adapt $\sigma$ via\\1/5th Success Rule};
+\node[decision, below=of sigma] (stag) {Stagnation\,?};
+\node[action, right=2.2cm of stag] (restart) {Restart: New\\Random Solution};
+\node[decision, below=of stag] (term) {Done\,?};
+\node[stop, below=0.8cm of term] (e) {};
+
+\draw[arrow] (s) -- (init);
+\draw[arrow] (init) -- (seed);
+\draw[arrow] (seed) -- (mutate);
+\draw[arrow] (mutate) -- (eval);
+\draw[arrow] (eval) -- (accept);
+\draw[arrow] (accept) -- node[left] {Yes} (yes);
+\draw[arrow] (accept.east) -- ++(1.5,0) node[above left, font=\sffamily\tiny] {No} |- (sigma);
+\draw[arrow] (yes) |- (sigma);
+\draw[arrow] (sigma) -- node[above] {Yes} (adapt);
+\draw[arrow] (sigma) -- node[left] {No} (stag);
+\draw[arrow] (adapt) |- (stag);
+\draw[arrow] (stag) -- node[above] {Yes} (restart);
+\draw[arrow] (stag) -- node[left] {No} (term);
+\draw[arrow] (restart) |- (mutate);
+\draw[arrow] (term.west) -- ++(-2.5,0) node[above right, font=\sffamily\tiny] {No} |- (mutate);
+\draw[arrow] (term) -- node[right] {Yes} (e);
+
+\end{tikzpicture}
+\caption{Activity Diagram: (1+1)-ES Solver Execution Flow}
+\label{fig:solver_activity}
+\end{figure}
+
 %-----------------------------------
 \section{The Interactive Timetable Editor}
 \label{sec:editor}
 
-The \texttt{EditorView} component provides an interactive, drag-and-drop interface for manually refining timetables---whether generated by the solver or imported from Excel. This section describes its key features.
+The \texttt{EditorView} component is where human judgment meets algorithmic output. It gives administrators an interactive, drag-and-drop interface for refining timetables---whether those timetables were generated by the solver or imported from Excel.
 
 \subsection{Drag-and-Drop Slot Rearrangement}
 
@@ -357,7 +404,48 @@ When conflicts exist, the administrator can invoke the \textbf{Large Neighbourho
     \item The process terminates early if all hard violations reach zero.
 \end{enumerate}
 
-The LNS targets only the problematic sessions rather than reoptimizing the entire schedule, making it significantly faster than a full solver run while preserving the administrator's manual adjustments to non-conflicting sessions.
+The LNS targets only the problematic sessions rather than reoptimizing the entire schedule, making it significantly faster than a full solver run while preserving the administrator's manual adjustments to non-conflicting sessions. Figure~\ref{fig:lns_activity} illustrates this destroy-and-repair process.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    node distance=1.1cm,
+    start/.style={draw, circle, fill=black, minimum size=6pt, inner sep=0pt},
+    stop/.style={draw, circle, fill=black, minimum size=6pt, inner sep=0pt, double, double distance=1.5pt},
+    action/.style={draw, rectangle, fill=green!8, rounded corners=3pt, text width=5.5cm, align=center, font=\sffamily\scriptsize, minimum height=0.6cm},
+    decision/.style={draw, diamond, aspect=2.5, fill=orange!10, text width=2cm, align=center, font=\sffamily\scriptsize, inner sep=1pt},
+    arrow/.style={draw, thick, ->, >=stealth, font=\sffamily\tiny}
+]
+
+\node[start] (s) {};
+\node[action, below=of s] (find) {Identify Clashing Set\\(all sessions with hard violations)};
+\node[decision, below=of find] (empty) {Clashing set\\empty?};
+\node[action, below=1.2cm of empty] (pick) {Pick random session from clashing set};
+\node[action, below=of pick] (mut) {Apply random mutation\\(relocate / time shift / room swap)};
+\node[action, below=of mut] (ev) {Evaluate candidate fitness};
+\node[decision, below=of ev] (better) {Improved?};
+\node[action, below left=1cm and 0cm of better] (acc) {Accept candidate\\Refresh clashing set};
+\node[decision, below=2cm of better] (maxiter) {Max attempts\\reached?};
+\node[stop, right=2cm of empty] (done1) {};
+\node[stop, below=0.8cm of maxiter] (done2) {};
+
+\draw[arrow] (s) -- (find);
+\draw[arrow] (find) -- (empty);
+\draw[arrow] (empty) -- node[right] {No} (pick);
+\draw[arrow] (empty) -- node[above] {Yes (feasible)} (done1);
+\draw[arrow] (pick) -- (mut);
+\draw[arrow] (mut) -- (ev);
+\draw[arrow] (ev) -- (better);
+\draw[arrow] (better) -- node[left] {Yes} (acc);
+\draw[arrow] (better.east) -- ++(1.5,0) node[above left, font=\sffamily\tiny] {No} |- (maxiter);
+\draw[arrow] (acc) |- (maxiter);
+\draw[arrow] (maxiter) -- node[right] {Yes} (done2);
+\draw[arrow] (maxiter.west) -- ++(-2,0) node[above right, font=\sffamily\tiny] {No} |- (pick);
+
+\end{tikzpicture}
+\caption{Activity Diagram: LNS Destroy-and-Repair Auto-Fix}
+\label{fig:lns_activity}
+\end{figure}
 
 \subsection{Master View}
 
@@ -367,7 +455,7 @@ The editor includes a ``Master View'' toggle that fetches and overlays all slots
 \section{The Generator Wizard}
 \label{sec:generator}
 
-The \texttt{GeneratorView} component provides a guided, multi-step configuration workflow that prepares the solver input and launches the optimization process. The workflow consists of the following steps:
+The \texttt{GeneratorView} component is the front door to the solver. It walks administrators through a guided, step-by-step configuration process that collects all the information the solver needs before launching the optimisation.
 
 \subsection{Step 1: Cluster Selection}
 
@@ -405,3 +493,66 @@ Upon clicking ``Generate Timetable,'' the system constructs the \texttt{SolverIn
     \item Transition directly to the \texttt{EditorView} for manual refinement.
     \item Download a comprehensive diagnostic log file.
 \end{itemize}
+
+\subsection{End-to-End Sequence Diagram}
+
+Figure~\ref{fig:generator_sequence} illustrates the complete interaction sequence between the administrator, the Generator Wizard UI, the database, and the solver engine during an automated timetable generation session.
+
+\begin{figure}[htbp]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+    actor/.style={rectangle, draw, fill=blue!10, text width=1.8cm, align=center, font=\sffamily\scriptsize, minimum height=0.7cm, rounded corners=2pt},
+    lifeline/.style={dashed, gray},
+    msg/.style={->, >=stealth, thick, font=\sffamily\tiny},
+    rmsg/.style={->, >=stealth, thick, dashed, font=\sffamily\tiny},
+    activation/.style={fill=blue!8, draw, minimum width=0.3cm},
+    note/.style={rectangle, draw, fill=yellow!10, text width=3cm, align=left, font=\sffamily\tiny, rounded corners}
+]
+
+% Actors
+\node[actor] (admin) at (0,0) {\textbf{Admin}};
+\node[actor] (gen) at (3.5,0) {\textbf{Generator\\View}};
+\node[actor] (db) at (7,0) {\textbf{Supabase\\DB}};
+\node[actor] (prep) at (10.5,0) {\textbf{dataPrep}};
+\node[actor] (solver) at (14,0) {\textbf{Solver\\Engine}};
+
+% Lifelines
+\foreach \x in {admin, gen, db, prep, solver} {
+    \draw[lifeline] (\x.south) -- ++(0,-14);
+}
+
+% Messages
+\draw[msg] (0,-1.2) -- node[above] {1. Select Cluster} (3.5,-1.2);
+\draw[msg] (3.5,-1.8) -- node[above] {2. Fetch subjects, groups} (7,-1.8);
+\draw[rmsg] (7,-2.4) -- node[above] {3. Return cluster data} (3.5,-2.4);
+
+\draw[msg] (0,-3.2) -- node[above] {4. Map rooms, assign profs} (3.5,-3.2);
+
+\draw[msg] (0,-4.0) -- node[above] {5. Configure seed \& locks} (3.5,-4.0);
+\draw[msg] (3.5,-4.6) -- node[above] {6. Fetch locked slots} (7,-4.6);
+\draw[rmsg] (7,-5.2) -- node[above] {7. Return locked sessions} (3.5,-5.2);
+
+\draw[msg] (0,-6.0) -- node[above] {8. Click ``Generate''} (3.5,-6.0);
+\draw[msg] (3.5,-6.6) -- node[above] {9. prepareSolverInput()} (10.5,-6.6);
+\draw[rmsg] (10.5,-7.2) -- node[above] {10. SolverInput bundle} (3.5,-7.2);
+
+\draw[msg] (3.5,-7.8) -- node[above] {11. runSolver(input)} (14,-7.8);
+
+% Solver loop
+\draw[msg] (14,-8.6) -- node[above] {12. onProgress()} (3.5,-8.6);
+\node[note, right=0.3cm of solver, yshift=-9cm] (loop) {Repeats every\\reportInterval\\generations};
+\draw[rmsg] (14,-9.4) -- node[above] {13. onProgress()} (3.5,-9.4);
+
+\draw[rmsg] (14,-10.4) -- node[above] {14. SolverResult} (3.5,-10.4);
+
+\draw[msg] (0,-11.2) -- node[above] {15. Click ``Save''} (3.5,-11.2);
+\draw[msg] (3.5,-11.8) -- node[above] {16. INSERT timetable + slots} (7,-11.8);
+\draw[rmsg] (7,-12.4) -- node[above] {17. Confirm saved} (3.5,-12.4);
+\draw[rmsg] (3.5,-13.0) -- node[above] {18. Navigate to EditorView} (0,-13.0);
+
+\end{tikzpicture}
+}%
+\caption{Sequence Diagram: End-to-End Generator Wizard Workflow}
+\label{fig:generator_sequence}
+\end{figure}

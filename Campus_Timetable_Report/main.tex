@@ -61,8 +61,10 @@ bibencoding=utf8,
 \usepackage[autostyle=true]{csquotes} % Required to generate language-dependent quotes in the bibliography
 \usepackage{array}% http://ctan.org/pkg/array
 \usepackage{lipsum}
+\usepackage{helvet} % Helvetica (metrically identical to Arial)
+\renewcommand{\familydefault}{\sfdefault} % Use sans-serif (Helvetica/Arial) as default
 \usepackage{tikz} % For drawing diagrams natively
-\usetikzlibrary{shapes.geometric, arrows.meta, positioning, fit, calc}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, fit, calc, shapes.multipart}
 \usepackage{tabularx} % For responsive tables
 \usepackage{booktabs} % For professional table rules
 \usepackage{listings} % For code snippets in appendix

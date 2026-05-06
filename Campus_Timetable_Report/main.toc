@@ -39,51 +39,53 @@
 \contentsline {subsection}{\numberline {4.2.1}Core Entities}{27}{subsection.58}%
 \contentsline {subsection}{\numberline {4.2.2}The Central Hub: \texttt {timetable\_slots}}{28}{subsection.60}%
 \contentsline {subsection}{\numberline {4.2.3}Generator and Solver Support Entities}{28}{subsection.62}%
-\contentsline {section}{\numberline {4.3}The Data Ingestion Pipeline}{29}{section.63}%
-\contentsline {section}{\numberline {4.4}View Routing and State Management}{31}{section.70}%
-\contentsline {chapter}{\numberline {5}Implementation and Results}{33}{chapter.71}%
-\contentsline {section}{\numberline {5.1}Dynamic Time Grid Generation}{33}{section.72}%
-\contentsline {section}{\numberline {5.2}Multi-Dimensional Clash Detection Algorithm}{34}{section.78}%
-\contentsline {section}{\numberline {5.3}Inverted Logic: The Free Room Finder}{35}{section.81}%
-\contentsline {section}{\numberline {5.4}React Component Hierarchy}{37}{section.87}%
-\contentsline {section}{\numberline {5.5}Role-Based Viewer Implementations}{37}{section.89}%
-\contentsline {subsection}{\numberline {5.5.1}Student Custom Timetable}{38}{subsection.91}%
-\contentsline {subsection}{\numberline {5.5.2}Master Occupancy Viewer}{38}{subsection.92}%
-\contentsline {section}{\numberline {5.6}Export Mechanisms and Results}{39}{section.93}%
-\contentsline {subsection}{\numberline {5.6.1}Client-Side PDF Generation}{39}{subsection.94}%
-\contentsline {subsection}{\numberline {5.6.2}Google Sheets API Export}{39}{subsection.95}%
-\contentsline {subsection}{\numberline {5.6.3}User Interface Evaluation}{39}{subsection.96}%
-\contentsline {section}{\numberline {5.7}The (1+1)-ES Timetable Solver}{40}{section.97}%
-\contentsline {subsection}{\numberline {5.7.1}Chromosome Representation}{40}{subsection.98}%
-\contentsline {subsection}{\numberline {5.7.2}Session Expansion: The 2+1 Lecture Format}{41}{subsection.100}%
-\contentsline {subsection}{\numberline {5.7.3}Fitness Function}{41}{subsection.101}%
-\contentsline {subsection}{\numberline {5.7.4}Hard Constraints}{42}{subsection.103}%
-\contentsline {subsection}{\numberline {5.7.5}Soft Constraints}{42}{subsection.105}%
-\contentsline {subsection}{\numberline {5.7.6}Mutation Operators}{43}{subsection.109}%
-\contentsline {subsection}{\numberline {5.7.7}$\sigma $-Adaptation: The 1/5th Success Rule}{44}{subsection.115}%
-\contentsline {subsection}{\numberline {5.7.8}Stagnation Restart}{44}{subsection.117}%
-\contentsline {subsection}{\numberline {5.7.9}Locked Sessions and Cross-Semester Awareness}{45}{subsection.118}%
-\contentsline {subsection}{\numberline {5.7.10}Solver Execution Flow}{45}{subsection.119}%
-\contentsline {section}{\numberline {5.8}The Interactive Timetable Editor}{46}{section.128}%
-\contentsline {subsection}{\numberline {5.8.1}Drag-and-Drop Slot Rearrangement}{46}{subsection.129}%
-\contentsline {subsection}{\numberline {5.8.2}Inline Editing}{46}{subsection.130}%
-\contentsline {subsection}{\numberline {5.8.3}Real-Time Conflict Visualization}{46}{subsection.131}%
-\contentsline {subsection}{\numberline {5.8.4}Feasibility Check}{47}{subsection.132}%
-\contentsline {subsection}{\numberline {5.8.5}LNS Auto-Fix}{47}{subsection.133}%
-\contentsline {subsection}{\numberline {5.8.6}Master View}{48}{subsection.138}%
-\contentsline {section}{\numberline {5.9}The Generator Wizard}{48}{section.139}%
-\contentsline {subsection}{\numberline {5.9.1}Step 1: Cluster Selection}{48}{subsection.140}%
-\contentsline {subsection}{\numberline {5.9.2}Step 2: Home Room Mapping}{48}{subsection.141}%
-\contentsline {subsection}{\numberline {5.9.3}Step 3: Professor Assignment Matrix}{49}{subsection.142}%
-\contentsline {subsection}{\numberline {5.9.4}Step 4: Seed and Lock Configuration}{49}{subsection.143}%
-\contentsline {subsection}{\numberline {5.9.5}Step 5: Solver Execution and Results}{49}{subsection.144}%
-\contentsline {chapter}{\numberline {6}Conclusion and Future Work}{51}{chapter.145}%
-\contentsline {section}{\numberline {6.1}Summary of Contributions}{51}{section.146}%
-\contentsline {section}{\numberline {6.2}Current Limitations and Proposed Enhancements}{53}{section.147}%
-\contentsline {section}{\numberline {6.3}Concluding Remarks}{53}{section.149}%
-\contentsline {chapter}{\numberline {A}Core Algorithm Snippets}{56}{appendix.150}%
-\contentsline {section}{\numberline {A.1}Dynamic Grid Generation Logic}{56}{section.151}%
-\contentsline {section}{\numberline {A.2}Real-Time Clash Detection Filter}{56}{section.179}%
-\contentsline {section}{\numberline {A.3}Solver Fitness Evaluation Function}{57}{section.207}%
-\contentsline {section}{\numberline {A.4}(1+1)-ES Solver Main Loop}{58}{section.253}%
-\contentsline {section}{\numberline {A.5}LNS Auto-Fix for the Editor}{59}{section.315}%
+\contentsline {subsection}{\numberline {4.2.4}Solver Data Model: Class Diagram}{29}{subsection.63}%
+\contentsline {section}{\numberline {4.3}The Data Ingestion Pipeline}{29}{section.65}%
+\contentsline {section}{\numberline {4.4}View Routing and State Management}{33}{section.72}%
+\contentsline {chapter}{\numberline {5}Implementation and Results}{34}{chapter.73}%
+\contentsline {section}{\numberline {5.1}Dynamic Time Grid Generation}{34}{section.74}%
+\contentsline {section}{\numberline {5.2}Multi-Dimensional Clash Detection Algorithm}{35}{section.80}%
+\contentsline {section}{\numberline {5.3}Inverted Logic: The Free Room Finder}{36}{section.83}%
+\contentsline {section}{\numberline {5.4}React Component Hierarchy}{38}{section.89}%
+\contentsline {section}{\numberline {5.5}Role-Based Viewer Implementations}{38}{section.91}%
+\contentsline {subsection}{\numberline {5.5.1}Student Cohort View}{39}{subsection.93}%
+\contentsline {subsection}{\numberline {5.5.2}Master Occupancy Viewer}{39}{subsection.94}%
+\contentsline {section}{\numberline {5.6}Export Mechanisms and Results}{39}{section.95}%
+\contentsline {subsection}{\numberline {5.6.1}Client-Side PDF Generation}{40}{subsection.96}%
+\contentsline {subsection}{\numberline {5.6.2}Google Sheets API Export}{40}{subsection.97}%
+\contentsline {subsection}{\numberline {5.6.3}User Interface Evaluation}{40}{subsection.98}%
+\contentsline {section}{\numberline {5.7}The (1+1)-ES Timetable Solver}{41}{section.99}%
+\contentsline {subsection}{\numberline {5.7.1}Chromosome Representation}{41}{subsection.100}%
+\contentsline {subsection}{\numberline {5.7.2}Session Expansion: The 2+1 Lecture Format}{42}{subsection.102}%
+\contentsline {subsection}{\numberline {5.7.3}Fitness Function}{42}{subsection.103}%
+\contentsline {subsection}{\numberline {5.7.4}Hard Constraints}{43}{subsection.105}%
+\contentsline {subsection}{\numberline {5.7.5}Soft Constraints}{43}{subsection.107}%
+\contentsline {subsection}{\numberline {5.7.6}Mutation Operators}{44}{subsection.111}%
+\contentsline {subsection}{\numberline {5.7.7}$\sigma $-Adaptation: The 1/5th Success Rule}{45}{subsection.117}%
+\contentsline {subsection}{\numberline {5.7.8}Stagnation Restart}{45}{subsection.119}%
+\contentsline {subsection}{\numberline {5.7.9}Locked Sessions and Cross-Semester Awareness}{45}{subsection.120}%
+\contentsline {subsection}{\numberline {5.7.10}Solver Execution Flow}{46}{subsection.121}%
+\contentsline {section}{\numberline {5.8}The Interactive Timetable Editor}{48}{section.131}%
+\contentsline {subsection}{\numberline {5.8.1}Drag-and-Drop Slot Rearrangement}{48}{subsection.132}%
+\contentsline {subsection}{\numberline {5.8.2}Inline Editing}{48}{subsection.133}%
+\contentsline {subsection}{\numberline {5.8.3}Real-Time Conflict Visualization}{48}{subsection.134}%
+\contentsline {subsection}{\numberline {5.8.4}Feasibility Check}{49}{subsection.135}%
+\contentsline {subsection}{\numberline {5.8.5}LNS Auto-Fix}{49}{subsection.136}%
+\contentsline {subsection}{\numberline {5.8.6}Master View}{51}{subsection.142}%
+\contentsline {section}{\numberline {5.9}The Generator Wizard}{51}{section.143}%
+\contentsline {subsection}{\numberline {5.9.1}Step 1: Cluster Selection}{51}{subsection.144}%
+\contentsline {subsection}{\numberline {5.9.2}Step 2: Home Room Mapping}{51}{subsection.145}%
+\contentsline {subsection}{\numberline {5.9.3}Step 3: Professor Assignment Matrix}{52}{subsection.146}%
+\contentsline {subsection}{\numberline {5.9.4}Step 4: Seed and Lock Configuration}{52}{subsection.147}%
+\contentsline {subsection}{\numberline {5.9.5}Step 5: Solver Execution and Results}{52}{subsection.148}%
+\contentsline {subsection}{\numberline {5.9.6}End-to-End Sequence Diagram}{53}{subsection.149}%
+\contentsline {chapter}{\numberline {6}Conclusion and Future Work}{54}{chapter.151}%
+\contentsline {section}{\numberline {6.1}Summary of Contributions}{54}{section.152}%
+\contentsline {section}{\numberline {6.2}Current Limitations and Proposed Enhancements}{56}{section.153}%
+\contentsline {section}{\numberline {6.3}Concluding Remarks}{56}{section.155}%
+\contentsline {chapter}{\numberline {A}Core Algorithm Snippets}{59}{appendix.156}%
+\contentsline {section}{\numberline {A.1}Dynamic Grid Generation Logic}{59}{section.157}%
+\contentsline {section}{\numberline {A.2}Real-Time Clash Detection Filter}{59}{section.185}%
+\contentsline {section}{\numberline {A.3}Solver Fitness Evaluation Function}{60}{section.213}%
+\contentsline {section}{\numberline {A.4}(1+1)-ES Solver Main Loop}{61}{section.259}%
+\contentsline {section}{\numberline {A.5}LNS Auto-Fix for the Editor}{62}{section.321}%

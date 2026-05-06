@@ -6,12 +6,12 @@
 
 %----------------------------------------------------------------------------------------
 
-The design of the IIITA Timetabling System is predicated on the principles of modularity, data integrity, and role-based accessibility. This chapter provides a comprehensive breakdown of the system architecture, detailing the overall application topology, the relational database schema, the administrative data ingestion pipeline, the solver module architecture, and the routing logic that drives the various stakeholder interfaces.
+In this chapter, we walk through the structural design of the IIITA Timetabling System. We cover the overall application topology, the relational database schema, how we ingest data from Excel files, the solver module architecture, and the routing logic that ties everything together.
 
 %-----------------------------------
 \section{Application Topology}
 
-The system follows a classic decoupled client-server architecture, modified for the modern web via a Backend-as-a-Service model. 
+Our system follows a classic three-tier architecture adapted for the modern web using a Backend-as-a-Service (BaaS) model.
 
 \begin{itemize}
     \item \textbf{Client Tier (React SPA):} The frontend is a Single Page Application (SPA) responsible for all user interactions, data formatting, client-side clash detection, and PDF generation. It communicates asynchronously with the backend via secure REST API calls over HTTPS.
@@ -98,6 +98,109 @@ To support automated timetable generation, the schema includes mapping tables th
     \item \textbf{\texttt{cluster\_requirements}:} A many-to-many join table linking a \texttt{semester\_cluster} to the \texttt{subjects} that must be scheduled for that cohort. Includes \texttt{estimated\_enrollment} for room utilization optimization.
     \item \textbf{\texttt{professor\_expertise}:} A mapping table linking \texttt{professors} to \texttt{subjects} they are qualified to teach, along with a preference level. This is used by the auto-fill feature in the Generator Wizard to intelligently suggest professor assignments.
 \end{itemize}
+
+\subsection{Solver Data Model: Class Diagram}
+
+Figure~\ref{fig:class_diagram} presents a UML class diagram of the solver's core data model, showing the relationships between the key TypeScript interfaces that drive the scheduling engine.
+
+\begin{figure}[htbp]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+    class/.style={
+        rectangle split, rectangle split parts=3,
+        draw, thick, fill=blue!5,
+        text width=5cm, align=center,
+        font=\sffamily\scriptsize,
+        rectangle split part fill={blue!15, white, white}
+    },
+    comp/.style={draw, thick, ->, >=Diamond[open], line width=0.8pt},
+    assoc/.style={draw, thick, ->, >=stealth, dashed},
+    note/.style={rectangle, draw, dashed, fill=yellow!10, text width=3cm, align=center, font=\sffamily\tiny, rounded corners}
+]
+
+% ClassSession
+\node[class] (cs) {
+    \textbf{ClassSession}
+    \nodepart{second}
+    \begin{tabular}{l}
+    + id: number \\
+    + subjectId: string \\
+    + groupId: string \\
+    + professorId: string \\
+    + duration: number \\
+    + slotType: enum \\
+    + homeRoomIndex: number \\
+    + isElective: boolean \\
+    + basketName: string? \\
+    + isLocked: boolean \\
+    + lecturePairIndex: number \\
+    \end{tabular}
+    \nodepart{third}
+    \textit{(immutable metadata)}
+};
+
+% Gene
+\node[class, right=3cm of cs] (gene) {
+    \textbf{Gene}
+    \nodepart{second}
+    \begin{tabular}{l}
+    + day: 1--5 \\
+    + startBucket: 1--8 \\
+    + roomIndex: number \\
+    \end{tabular}
+    \nodepart{third}
+    \textit{(scheduling decision)}
+};
+
+% SolverInput
+\node[class, below=2.5cm of cs] (si) {
+    \textbf{SolverInput}
+    \nodepart{second}
+    \begin{tabular}{l}
+    + sessions: ClassSession[] \\
+    + rooms: Room[] \\
+    + numDays: 5 \\
+    + numBuckets: 8 \\
+    + config: SolverConfig \\
+    \end{tabular}
+    \nodepart{third}
+    \textit{(solver entry point)}
+};
+
+% FitnessResult
+\node[class, below=2.5cm of gene] (fr) {
+    \textbf{FitnessResult}
+    \nodepart{second}
+    \begin{tabular}{l}
+    + total: number \\
+    + hardViolations: number \\
+    + gapPenalty: number \\
+    + roomUtilPenalty: number \\
+    + profSameHalfPenalty: number \\
+    + violationBreakdown: {...} \\
+    \end{tabular}
+    \nodepart{third}
+    \textit{(evaluation output)}
+};
+
+% Solution type alias note
+\node[note, above=0.8cm of gene] (sol) {
+    \textbf{Solution} = Gene[] \\
+    (1:1 with sessions)
+};
+
+% Relationships
+\draw[comp] (si) -- node[left, font=\sffamily\tiny] {contains *} (cs);
+\draw[comp] (sol) -- node[right, font=\sffamily\tiny] {contains *} (gene);
+\draw[assoc] (cs) -- node[above, font=\sffamily\tiny] {maps 1:1} (gene);
+\draw[assoc] (si.east) -- node[below, font=\sffamily\tiny] {evaluate() $\to$} (fr.west);
+
+\end{tikzpicture}
+}%
+\caption{UML Class Diagram of the Solver Data Model}
+\label{fig:class_diagram}
+\end{figure}
 
 %-----------------------------------
 \section{The Data Ingestion Pipeline}

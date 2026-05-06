@@ -6,78 +6,78 @@
 
 %----------------------------------------------------------------------------------------
 
-The administration of academic institutions involves numerous complex logistical challenges, among which the generation, management, and distribution of timetables stand out as one of the most resource-intensive tasks. The University Timetabling Problem (UTP) is a well-known constraint satisfaction problem that has garnered significant attention from both the operations research and computer science communities. In modern educational environments, the necessity for a dynamic, robust, and accessible system to manage these schedules has become paramount. This chapter provides a comprehensive introduction to the IIITA Timetabling System, outlining the background, motivation, problem statement, objectives, and the overall organization of the thesis.
+Every semester, universities face the same daunting puzzle: how do you fit hundreds of courses, dozens of professors, and a limited set of classrooms into a weekly schedule that actually works? This is the University Timetabling Problem (UTP), and it is famously NP-hard---meaning there is no known algorithm that can guarantee a perfect solution in reasonable time. In this chapter, we introduce the IIITA Timetabling System, explain why we built it, and lay out the structure of the rest of this thesis.
 
 %-----------------------------------
 \section{Background and Motivation}
 
-Academic timetabling involves the assignment of events---such as lectures, tutorials, and practical laboratory sessions---to a limited number of resources, including time slots, rooms, and teaching faculty. This assignment must satisfy a myriad of constraints. These constraints are generally categorized into two distinct types: hard constraints, which cannot be violated under any circumstances (such as double-booking a professor or scheduling a class in an occupied room), and soft constraints, which are desirable but not strictly necessary (such as minimizing the number of gaps between classes for students or avoiding late-evening classes).
+Academic timetabling boils down to assigning events---lectures, tutorials, and lab sessions---to time slots, rooms, and professors, all while respecting a web of constraints. Some of these constraints are absolute: you cannot double-book a professor or schedule two classes in the same room at the same time. Others are softer preferences: students would rather not have large gaps between classes, and professors would prefer to teach in a single half of the day rather than being spread across morning and afternoon.
 
-Traditionally, timetabling at the Indian Institute of Information Technology, Allahabad (IIITA) and many similar institutions has been largely a manual or semi-automated process. Academic coordinators rely on spreadsheet software, such as Microsoft Excel, to draft and refine schedules. While Excel provides a flexible canvas for data entry, it lacks inherent semantic understanding of the data it holds. Consequently, detecting scheduling conflicts---such as overlapping classes for a specific student section or a professor being assigned to two different locations simultaneously---relies heavily on human vigilance. This manual verification is prone to error, especially given the scale of a modern university with hundreds of courses, dozens of rooms, and thousands of students.
+At IIIT Allahabad, like many Indian universities, scheduling has traditionally been a manual affair. Academic coordinators draft timetables in Microsoft Excel, painstakingly checking for conflicts by eye. Excel is flexible, but it has no understanding of what a ``professor'' or a ``room'' actually means---it just sees text in cells. As a result, catching mistakes like a professor being assigned to two rooms at once depends entirely on human vigilance. With hundreds of courses and thousands of students, errors are inevitable.
 
-Furthermore, once a timetable is generated in a static format like a PDF or a spreadsheet, distributing updates becomes a significant challenge. Changes in room allocations or faculty assignments necessitate the redistribution of the entire document, leading to version control issues where students or faculty might refer to outdated schedules. The static nature of these documents also means they cannot be easily queried. For instance, a student wishing to find a free room for group study, or an administrator wanting to visualize the overall campus occupancy at a specific hour, cannot easily extract this information from a flat Excel file.
+The problems do not end once a timetable is published. Distributing a static PDF or spreadsheet means that any change---a room swap, a new faculty assignment---requires sending out the entire document again. Students end up working from outdated copies, and nobody can easily answer simple questions like ``which rooms are free at 2 PM on Wednesday?''
 
-The motivation for the IIITA Timetabling System stems directly from these inefficiencies. There is a pressing need for a centralized, cloud-based platform that can act as a single source of truth for all academic scheduling data. By transitioning from static files to a dynamic database-driven architecture, it becomes possible to offer customized, role-based views of the schedule, perform real-time clash detection, automate the generation of conflict-free schedules using evolutionary algorithms, and facilitate seamless updates.
+These frustrations motivated us to build the IIITA Timetabling System. We wanted a single, centralised platform that could serve as the definitive source of truth for all scheduling data---one that could automatically generate conflict-free timetables, let administrators fine-tune them interactively, and give every stakeholder (students, faculty, administrators) a tailored, always-up-to-date view of their schedule.
 
 %-----------------------------------
 \section{Problem Statement}
 
-The core problem addressed by this thesis is the inefficiency, error-proneness, and static nature of traditional, spreadsheet-based university timetable management, combined with the lack of automated schedule generation. Specifically, the existing process suffers from the following critical limitations:
+The core problem we set out to solve is straightforward: traditional spreadsheet-based timetable management at IIITA is slow, error-prone, and fundamentally static. More specifically, the existing process suffers from:
 
 \begin{itemize}
-    \item \textbf{Data Silos and Unstructured Formats:} Timetables are often maintained in unstructured Excel formats containing complex cell merges, inconsistent naming conventions, and implicit relationships that are difficult for machines to parse.
-    \item \textbf{Lack of Automated Conflict Resolution:} Identifying clashes (room double-booking, professor overlaps, or section schedule conflicts) is a manual process, leading to inevitable logistical errors that disrupt academic operations.
-    \item \textbf{Absence of Automated Schedule Generation:} No system exists at the institutional level to automatically compute a conflict-free timetable from scratch given a set of subjects, professors, rooms, and student groups. The entire process remains manual and iterative.
-    \item \textbf{Absence of Role-Specific Visibility:} A singular master timetable is difficult to interpret for individual stakeholders. Students must manually filter through extensive documents to find their specific classes, while faculty struggle to isolate their teaching commitments.
-    \item \textbf{Poor Resource Utilization Tracking:} Administrators have no centralized mechanism to quickly identify available rooms or assess the overall occupancy rate of campus infrastructure at any given time.
-    \item \textbf{Static Distribution:} Once published, schedules cannot be easily updated dynamically, resulting in communication gaps and reliance on outdated physical or digital copies.
+    \item \textbf{Unstructured Data:} Timetables live in Excel files full of merged cells, inconsistent naming, and implicit relationships that are nearly impossible for software to parse reliably.
+    \item \textbf{Manual Conflict Detection:} Spotting clashes---room double-bookings, professor overlaps, section conflicts---is done by hand, and mistakes regularly slip through.
+    \item \textbf{No Automated Generation:} There is no institutional tool to compute a conflict-free timetable from scratch. The entire process is manual and iterative, often taking weeks of back-and-forth.
+    \item \textbf{One-Size-Fits-All Views:} A single master timetable is overwhelming. Students must hunt through it to find their classes, and professors have no quick way to see just their teaching schedule.
+    \item \textbf{No Resource Visibility:} Administrators have no easy way to check which rooms are free at a given time or how well campus space is being utilised.
+    \item \textbf{Static Distribution:} Once a timetable is published as a PDF, updating it means redistributing the entire file---and hoping everyone sees the new version.
 \end{itemize}
 
-Therefore, the objective is to design and implement a comprehensive software solution that can bridge the gap between human-readable spreadsheet formats and machine-readable relational data, automate the generation of conflict-free schedules, provide interactive editing tools, and enable dynamic, intelligent, and accessible timetable management.
+Our goal, then, was to build a system that bridges the gap between messy spreadsheets and structured data, automates schedule generation, provides interactive editing tools, and delivers dynamic, role-specific views of the timetable.
 
 %-----------------------------------
 \section{Objectives of the Study}
 
-To address the problems outlined above, this project sets forth a series of specific, measurable objectives. The primary goal is to develop a full-stack web application that serves as a centralized hub for all scheduling activities. The specific objectives are as follows:
+We set ourselves seven concrete objectives:
 
 \begin{enumerate}
-    \item \textbf{Heuristic Data Ingestion:} To design and implement a sophisticated parsing engine capable of reading complex, unstructured Excel timetable files. This engine must intelligently extract metadata (subjects, faculty, rooms), resolve cell merges (common in multi-hour laboratory sessions), and normalize varying time formats into a structured relational schema.
-    \item \textbf{Real-Time Clash Detection:} To develop robust algorithms capable of analyzing the structured timetable data to instantly identify and highlight scheduling conflicts across multiple dimensions, including rooms, professors, and student sections.
-    \item \textbf{Role-Based Dynamic Visualization:} To create specialized user interfaces tailored to the needs of different stakeholders. This includes:
+    \item \textbf{Heuristic Data Ingestion:} Build a parsing engine that can read IIITA's complex Excel timetable files, extract metadata (subjects, faculty, rooms), resolve merged cells, and normalise everything into a clean relational schema.
+    \item \textbf{Real-Time Clash Detection:} Develop algorithms that instantly flag scheduling conflicts across rooms, professors, and student sections the moment data is loaded.
+    \item \textbf{Role-Based Views:} Create tailored interfaces for each stakeholder:
     \begin{itemize}
-        \item A personalized ``My Timetable'' view for students, featuring subject filtering and elective selection.
-        \item A dedicated ``Professor View'' for teaching faculty.
-        \item A ``Master Occupancy View'' and ``Free Room Finder'' for campus administrators to optimize infrastructure usage.
+        \item A filtered student schedule with section and elective selection.
+        \item A dedicated Professor View showing only their teaching commitments.
+        \item A Master Occupancy View and Free Room Finder for campus administrators.
     \end{itemize}
-    \item \textbf{Export and Reporting Mechanisms:} To integrate seamless export functionality, allowing users to generate high-quality localized PDFs of their schedules, and enabling administrators to export complex, heavily formatted schedule reports directly to Google Sheets using the Google Sheets API.
-    \item \textbf{Automated Timetable Generation:} To implement a fully functional automated timetable generator using a (1+1) Evolution Strategy (ES) algorithm. This solver must evaluate candidate schedules against a comprehensive fitness function encompassing ten hard constraints and three soft constraints, employ adaptive step-size control via the 1/5th success rule, support warm-starting from existing seed timetables, and respect cross-semester constraints through locked published sessions.
-    \item \textbf{Interactive Timetable Editor:} To develop a drag-and-drop editing interface that allows administrators to manually refine solver-generated or imported timetables. This editor must provide real-time conflict visualization, inline editing of room and professor assignments, and an automated Large Neighbourhood Search (LNS) auto-fix routine to resolve remaining clashes.
-    \item \textbf{Multi-Step Generator Wizard:} To build a guided configuration workflow that enables administrators to select semester clusters, map home rooms, assign professors to subjects via an interactive matrix, and launch the solver with configurable seed and locked timetable options.
+    \item \textbf{Export and Reporting:} Integrate PDF generation for individual schedules and Google Sheets export for administrators who need professionally formatted, shareable documents.
+    \item \textbf{Automated Timetable Generation:} Implement a (1+1) Evolution Strategy solver that evaluates candidates against ten hard constraints and three soft constraints, adapts its step size via the 1/5th success rule, supports warm-starting from existing schedules, and respects cross-semester constraints through locked sessions.
+    \item \textbf{Interactive Timetable Editor:} Build a drag-and-drop interface for refining timetables with real-time conflict highlighting, inline room and professor editing, and a one-click LNS auto-fix for resolving remaining clashes.
+    \item \textbf{Generator Wizard:} Create a guided, multi-step workflow that walks administrators through cluster selection, home room mapping, professor assignment, and solver configuration.
 \end{enumerate}
 
 %-----------------------------------
 \section{Scope and Limitations}
 
-The scope of this project encompasses the design, development, and deployment of the IIITA Timetabling System frontend using React and TypeScript, the backend infrastructure using Supabase (PostgreSQL), and the automated timetable solver using a (1+1) Evolution Strategy implemented entirely in client-side TypeScript. The system is specifically tailored to handle the complexities of the timetable format used at IIIT Allahabad, though the architectural principles are extensible to other institutions.
+This project covers the full design, development, and deployment of the IIITA Timetabling System: a React and TypeScript frontend, a Supabase (PostgreSQL) backend, and a (1+1)-ES solver running entirely in the browser. While the system is tailored to IIIT Allahabad's specific timetable format, the architecture is general enough to adapt to other institutions.
 
-It is important to clearly define the limitations of the current system:
+That said, there are a few important limitations to keep in mind:
 \begin{itemize}
-    \item \textbf{Heuristic Parser Boundaries:} The Excel parser relies on specific heuristic rules (e.g., header row detection, column mapping). Significant deviations from the standard institutional template may require manual intervention or updates to the parsing logic.
-    \item \textbf{Single-Threaded Solver:} The (1+1)-ES solver executes on the browser's main thread using batched asynchronous scheduling (via \texttt{setTimeout}). While sufficient for current problem sizes, institutions with significantly larger datasets may require a migration to Web Workers or a server-side solver for improved performance.
-    \item \textbf{Heuristic Optimality:} The Evolution Strategy is a meta-heuristic. While it reliably produces feasible (zero hard-violation) schedules, the solutions are not guaranteed to be globally optimal with respect to soft constraints. The quality of solutions depends on the number of generations and the specific mutation landscape.
+    \item \textbf{Parser Sensitivity:} Our Excel parser relies on heuristic rules tuned to IIITA's template. Major deviations from that format may require tweaking the parsing logic.
+    \item \textbf{Single-Threaded Solver:} The solver runs on the browser's main thread using batched \texttt{setTimeout} calls. This works well for current problem sizes but could become a bottleneck for much larger institutions.
+    \item \textbf{Heuristic Optimality:} Evolution Strategies are meta-heuristics---they reliably find feasible schedules (zero hard violations), but the solutions are not guaranteed to be globally optimal for soft constraints. Quality depends on the number of generations and the search landscape.
 \end{itemize}
 
 %-----------------------------------
 \section{Organization of the Thesis}
 
-The remainder of this thesis is structured as follows to provide a logical progression from theory to implementation and finally to evaluation:
+The rest of this thesis is organised as follows:
 
-\textbf{Chapter 2: Literature Review} explores the existing body of work related to university timetabling. It discusses the theoretical underpinnings of the University Timetabling Problem (UTP) as an NP-hard constraint satisfaction problem and reviews various algorithmic approaches and existing software solutions in the academic and commercial spheres.
+\textbf{Chapter 2: Literature Review} surveys existing work on university timetabling, covering the theoretical foundations of UTP as an NP-hard problem and reviewing algorithmic approaches from the literature.
 
-\textbf{Chapter 3: Technologies and Frameworks} provides a detailed technical overview of the modern web development stack chosen for this project. It delves into the rationale behind selecting React 19, TypeScript, Tailwind CSS, Vite, and the Supabase Backend-as-a-Service (BaaS) platform, explaining how these tools contribute to the system's performance and maintainability.
+\textbf{Chapter 3: Technologies and Frameworks} explains our technology choices---React 19, TypeScript, Tailwind CSS, Vite, and Supabase---and why each was selected.
 
-\textbf{Chapter 4: System Architecture and Design} dissects the structural blueprint of the application. It presents the relational database schema, detailing the entities and their complex relationships. Furthermore, it explains the data flow from raw Excel ingestion through the parsing pipeline to the cloud database, the modular architecture of the solver engine, and finally to the client-side React components.
+\textbf{Chapter 4: System Architecture and Design} walks through the database schema, the data ingestion pipeline, the solver module structure, and the client-side component routing.
 
-\textbf{Chapter 5: Implementation and Results} is the core technical chapter of the thesis. It provides an in-depth look at the implementation of critical system modules, including the heuristic Excel parser, the multi-dimensional clash detection algorithms, the (1+1)-ES solver algorithm with its ten hard constraints and three soft constraints, the interactive drag-and-drop Timetable Editor with LNS-based auto-fix, and the multi-step Generator Wizard. This chapter also showcases the final user interfaces and discusses the integration of external APIs such as Google Sheets.
+\textbf{Chapter 5: Implementation and Results} is the heart of the thesis. It covers the Excel parser, the clash detection algorithms, the (1+1)-ES solver and its constraint system, the drag-and-drop editor with LNS auto-fix, and the Generator Wizard.
 
-\textbf{Chapter 6: Conclusion and Future Work} summarizes the key contributions of the project, reflects on the challenges overcome during development, and outlines promising avenues for future research and enhancement, particularly focusing on parallelized solvers and advanced meta-heuristic hybridization.
+\textbf{Chapter 6: Conclusion and Future Work} sums up what we achieved, reflects on the challenges we faced, and outlines future directions such as parallelised solvers and hybrid meta-heuristics.
