@@ -71,28 +71,30 @@ The transition from data ingestion to the core solver introduces a highly constr
 
 \section{Mathematical Representation of the Schedule}
 
-To facilitate computational optimization, the schedule is encoded into a specific data structure known as a \textit{Chromosome}. The solver models a complete timetable $S$ as an ordered array of \textit{genes}. Each gene $g_i \in S$ encodes the precise scheduling decision for the $i$-th class session, mapping it to a spatial and temporal coordinate. 
+In order to achieve computation of optimal schedules, the schedule is first transformed to a particular data structure, namely \textit{Chromosome}. In the solver, timetable $S$ is considered to be represented by a sequence of \textit{genes}.
 
-Formally, a gene is defined as a tuple:
+Genes are represented in the following form:
 \begin{equation}
     g_i = (d_i, t_i, r_i)
 \end{equation}
-where:
+such that:
 \begin{itemize}
-    \item $d_i \in \{1, 2, 3, 4, 5\}$ represents the day of the week (Monday through Friday).
-    \item $t_i \in \{1, 2, \dots, 8\}$ represents the discrete start time slot (each slot corresponding to one hour, from 08:50 to 18:30).
-    \item $r_i \in \mathcal{R}$ is the index into the array of available physical rooms.
+    \item $d_i \in \{1, 2, 3, 4, 5\}$ - the number of the day of the week (Monday-Friday).
+    \item $t_i \in \{1, 2, \dots, 8\}$ - the number of time period (time period represents each hour starting at 08:50 and finishing at 18:30).
+    \item $r_i \in \mathcal{R}$ - the index in the list of physical rooms' numbers.
 \end{itemize}
 
-Each gene is invariably linked to an immutable \texttt{ClassSession} object that contains the session's metadata: the specific subject identifier, the student group $G_i$, the assigned professor $p_i$, the duration $D_i$, and the specific slot type (Lecture, Tutorial, or Practical).
+Each gene is related to the particular and immutable \texttt{ClassSession} object containing information about the session itself (the subject name, the students' group $G_i$, professor $p_i$, session's duration $D_i$, and the type of the slot (Lecture, Tutorial, Practical)).
 
-\section{Mathematical Formulation of Constraints}
 
-The optimization objective is governed by a composite fitness function that evaluates both the feasibility and the quality of the candidate solution $S$.
 
-\subsection{Hard Constraints (The Feasibility Space)}
+\section{Formulation of Hard/Soft Constraints}
 
-Hard constraints define the boundary of feasible solutions. A schedule is strictly invalid if any hard constraint is violated. For two distinct sessions $i$ and $j$, we define the temporal overlap condition as:
+Optimization of the problem depends on the use of a hybrid function to assess the feasibility and the quality of the solution $S$ under consideration.
+
+\subsection{Hard Constraints (Feasibility Space)}
+
+These constraints set the limit for feasible solutions. In case of violation of any of the hard constraints, the proposed schedule cannot be considered feasible. Overlap condition between sessions $i$ and $j$ may be written as follows:
 \begin{equation}
     \text{overlap}(t_i, t_j) = \begin{cases} 
       1 & \text{if } \max(t_i, t_j) \le \min(t_i + D_i - 1, t_j + D_j - 1) \\
@@ -100,7 +102,7 @@ Hard constraints define the boundary of feasible solutions. A schedule is strict
    \end{cases}
 \end{equation}
 
-The engine enforces the following critical hard penalties:
+The following hard constraints are enforced by the algorithm:
 \begin{itemize}
     \item \textbf{Professor Overlap Penalty:} A professor $p$ cannot be physically present in two different locations at time $t$. 
     \begin{equation}
@@ -111,6 +113,7 @@ The engine enforces the following critical hard penalties:
     \begin{equation}
         \sum_{i \neq j} \mathbb{I}(G_i = G_j \land d_i = d_j \land \text{overlap}(t_i, t_j) \land \neg \text{SameBasket}(i, j)) = 0
     \end{equation}
+
 
     \item \textbf{Room Clash Penalty:} A physical room $r$ can host at most one session at any given time.
     \begin{equation}
@@ -140,16 +143,16 @@ The engine enforces the following critical hard penalties:
 \toprule
 \textbf{\#} & \textbf{Constraint Name} & \textbf{Description} \\
 \midrule
-1 & Time Boundary & A session must not extend beyond slot 8 (18:30). \\
-2 & Break/Lunch Crossing & A multi-slot session must not span across a break boundary (slots 2$\to$3 or 4$\to$5). \\
-3 & Room Non-Overlap & At most one session may occupy a given room at any (day, slot). \\
-4 & Professor Non-Overlap & A professor can teach at most one session at any given slot. No elective exemption. \\
-5 & Group Non-Overlap & A student group can attend at most one session per slot. Elective--elective pairs and same-basket pairs are exempt. \\
-6 & Elective Basket Sync & Synced baskets (HSMC, MDM) must share the same (day, slot). No two different baskets may share a slot (global anti-clash). \\
-7 & Lab Room & Practical sessions must be assigned to rooms with type ``Lab''. \\
-8 & WMC-Section Overlap & A whole-batch (WMC) session cannot occupy the same slot as any section-level session. \\
-9 & Home Room & Core lectures and tutorials must be placed in their assigned home room. \\
-10 & 2+1 Lecture Format & The double-lecture block and single-lectures for the same subject+group must be on different days. \\
+1 & Time Boundary & The maximum slot for conducting a session is slot 8 (18:30). \\
+2 & Break / Lunch Crossing & Multi-slot sessions cannot cross a break boundary ($2 \rightarrow 3$, $4 \rightarrow 5$). \\
+3 & Room Non-overlap & Only one session can be conducted in a room at any (day, slot) pair. \\
+4 & Professor Non-overlap & A professor can conduct only one session at any (day, slot) pair. There is no elective exemption. \\
+5 & Group Non-overlap & Only one session can be attended by the same student group at any (day, slot) pair. Elective - elective combinations and basket combinations are exempt from this rule. \\
+6 & Elective Baskets Synchronization & The synchronized baskets must have the same day and slot. Two different baskets cannot have the same slot (global anti-clash). \\
+7 & Lab Room & Practical Sessions must be scheduled in the rooms whose types are ``Lab''. \\
+8 & WMC-Section Clash & The whole-batch (WMC) session cannot coincide with any other session in the same slot. \\
+9 & Home Room & The core lectures and tutorials must be scheduled in their respective home rooms. \\
+10 & 2 + 1 Lecture Rule & Double lecture sessions for the same course and student group should not take place on the same day as the single lectures. \\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -338,20 +341,18 @@ The final scheduling matrix is programmatically serialized into a high-fidelity 
 %-----------------------------------
 \section{Dynamic Time Grid Generation}
 
-A significant challenge in displaying timetables is the variability of time slots. Hardcoding a static grid (e.g., exactly ten 1-hour slots from 9:00 AM to 7:00 PM) results in wasted visual space when classes end early, and fails to accommodate non-standard time ranges (such as a 1.5-hour class).
+One of the major problems with rendering timetables is the flexibility of time blocks. Defining a fixed grid with a predetermined number of columns, such as ten 1-hour slots between 9:00 AM and 7:00 PM, leads to underutilization of the screen space and inability to represent unusual time blocks, e.g., a 1.5-hour lesson.
 
-To solve this, all viewer components in the system implement a \textbf{Dynamic Time Column Generator algorithm}.
-When a timetable is selected, the system fetches all associated \texttt{timetable\_slots}. The algorithm then executes the following steps:
+This problem is solved using a \textbf{Dynamic Time Column Generator} algorithm, which is implemented by all viewers in the system. When a user selects a timetable, the system extracts all corresponding \texttt{timetable\_slots}, and the following actions are taken:
 \begin{enumerate}
-    \item Extracts all unique \texttt{start\_time} and \texttt{end\_time} strings from the raw slot data.
-    \item Injects hardcoded institutional break times: \texttt{10:50} to \texttt{11:00} (Morning Break) and \texttt{13:00} to \texttt{14:30} (Lunch Break).
-    \item Sorts all extracted timestamps chronologically to create an array of discrete time boundaries.
-    \item Iterates through adjacent pairs of boundaries to generate standard columns.
-    \item Filters out any generated columns that fall entirely within the lunch or break periods, or that contain absolutely zero scheduled classes.
+    \item All unique \texttt{start\_time} and \texttt{end\_time} values are extracted from the dataset.
+    \item Hardcoded institutional breaks are inserted into the list: \texttt{10:50 - 11:00} (morning break) and \texttt{13:00 - 14:30} (lunch break).
+    \item All time points are sorted in chronological order to produce a list of discrete time intervals.
+    \item Pairs of adjacent time intervals are used to produce a series of standard columns.
+    \item All columns that lie inside the lunch period or breaks and have no lessons assigned are filtered out.
 \end{enumerate}
 
-The result is a highly responsive grid that only displays columns for active periods, maximizing screen real estate and improving readability.
-
+As a consequence, a very dynamic grid is produced, with only active time blocks displayed on the screen.
 %-----------------------------------
 \section{Multi-Dimensional Clash Detection Algorithm}
 
@@ -363,6 +364,8 @@ An overlap is mathematically defined as occurring when:
 \end{equation}
 
 When an overlap is detected, the algorithm categorizes the clash into one of four distinct types as summarized in Table~\ref{tab:clash_types}.
+
+
 
 \begin{table}[htbp]
 \centering
@@ -486,19 +489,18 @@ Crucially, it implements a \textbf{Smart Merging algorithm}. Often, core lecture
 For campus administrators, the `MasterRoomViewer` provides a macro-level perspective. It displays a dense grid where rows represent physical rooms rather than student groups. Because an institution may have hundreds of rooms, this view implements a building-level filter. The system extracts the building prefix from the room name (e.g., identifying ``CC-3'' from ``CC-3-5106'') and allows the administrator to filter the grid, rendering a manageable overview of specific campus zones.
 
 %-----------------------------------
-\section{Export Mechanisms and Results}
+\section{Export Approaches and Outcomes}
 
-To bridge the gap between the digital system and offline requirements, the platform implements robust export mechanisms.
+To fill in the gap between the digital world and reality, there is an effective set of export options implemented by the tool.
 
-\subsection{Client-Side PDF Generation}
-Users can generate PDFs of their current view. This relies on the `html-to-image` library to capture the DOM state as a PNG, which is then embedded into a `jsPDF` document. A significant technical hurdle overcome during implementation was the handling of sticky CSS headers; the capture logic temporarily disables `position: sticky` properties on the DOM elements right before capture to ensure the entire scrollable area is rendered to the image buffer accurately.
+\subsection{Client-Side PDF Export}
+It is possible to generate a PDF of the current screen view. This function uses `html-to-image` package that generates a snapshot of the current DOM state as a PNG image and embeds it to the `jsPDF` document. One of the key problems solved during implementation is related to CSS sticky property that needed to be temporarily turned off right before capturing the screen for accurate image generation.
 
-\subsection{Google Sheets API Export}
-The `RoomTimetableViewer` and `FreeRoomViewer` support bulk export directly to Google Sheets. Using the Google Identity Services client, the React application constructs a multi-layered batch update request. This request not only writes the raw string data into the cells but explicitly formats the workbookΓÇöcreating separate worksheets for different rooms, freezing header rows, applying pink and gray background colors to headers, and drawing solid bordersΓÇöresulting in a highly professional, ready-to-share document directly in the administrator's Google Drive.
+\subsection{Google Sheets Export}
+Exporting to Google Sheets is supported both in `RoomTimetableViewer` and `FreeRoomViewer`. Using the services provided by Google Identity Service client, the React app creates batch requests that both save the raw string data into cells of the Google Sheet, as well as perform additional operations, like formatting the sheet (creation of sheets corresponding to particular rooms, freeze of header rows, assigning pink/gray background color to them and adding solid borders).
 
 \subsection{User Interface Evaluation}
-The resulting application is a highly responsive, modern interface. By utilizing Tailwind CSS, the application maintains a clean, minimalist aesthetic with clear color coding (e.g., orange for practicals, green for tutorials). The elimination of page reloads between views, combined with the instantaneous clash detection, represents a monumental upgrade in usability and efficiency compared to traditional spreadsheet workflows.
-
+The end result is a fast, modern interface. By implementing Tailwind CSS, it becomes possible to keep the minimalistic look, yet use distinctive color palette (e.g. green for tutorial time and orange for practical classes). Absence of page reloading in between viewing and instant clash detection marks the revolutionary shift from spreadsheet processing to our solution.
 %-----------------------------------
 %-----------------------------------
 %  NEW SECTIONS: SOLVER, EDITOR, GENERATOR
@@ -511,39 +513,42 @@ The resulting application is a highly responsive, modern interface. By utilizing
 \section{The Interactive Timetable Editor}
 \label{sec:editor}
 
-The \texttt{EditorView} component is where human judgment meets algorithmic output. It gives administrators an interactive, drag-and-drop interface for refining timetables---whether those timetables were generated by the solver or imported from Excel.
+The \texttt{EditorView} component is where human discretion comes into play with the output of the algorithm. This component presents an interactive drag-and-drop interface to refine timetables---both solver-generated and manually imported timetables in Excel format.
 
-\subsection{Drag-and-Drop Slot Rearrangement}
+\subsection{Drag-and-Drop Session Rescheduling}
 
-The editor renders a dense 5-day $\times$ $N$-slot grid, where each scheduled session appears as a draggable card. Administrators can drag any session card from one cell to another to reassign its day and start time. The system automatically recalculates the end time based on the session's duration and validates that the new position does not fall in a lunch or break slot. All drag operations push the previous state onto a 30-level undo stack.
+The editor provides a dense grid of 5 days $\times$ $N$ slots, where each allocated session is represented by a draggable card. The administrator can drag each session card to a different cell to adjust the session’s day and start time. The system calculates the end time of the session and ensures that the newly allocated position is not during the lunch or break hours. Each drag operation pushes the old state onto a stack of undo levels, which is limited to 30 items.
 
 \subsection{Inline Editing}
 
-Each session card exposes a hover-activated edit panel that allows inline modification of:
+Each session card presents an inline editing tool when hovered over, which enables the administrator to change the following details:
 \begin{itemize}
-    \item \textbf{Room Assignment:} A cascading two-step selector where the administrator first selects the room type (Lecture or Lab), then picks from filtered rooms of that type.
-    \item \textbf{Professor Assignment:} A dropdown populated from the full professor list.
+    \item \textbf{Room Allocation:} A cascading selection interface where the administrator first chooses between Lecture and Lab rooms and then selects from the filtered room list.
+    \item \textbf{Professor Allocation:} A drop-down list containing all the professors in the university.
 \end{itemize}
+
 
 \subsection{Real-Time Conflict Visualization}
 
-The editor implements a client-side clash detection algorithm that runs on every state change. Sessions involved in any conflict are highlighted with a red background and ring border. The algorithm checks the same constraints as the solver: room overlaps, professor overlaps, section overlaps (with elective exemptions), WMC-section conflicts, cross-basket elective clashes, and the 2+1 same-day lecture rule.
+The editor incorporates a client-side conflict checking algorithm which is called with every state update. Sessions in a conflicting set receive a distinctive red background and ring border. The algorithm performs the exact same validations as the solver, which includes: room overlaps, professor overlaps, section overlaps (except electives), WMC-section conflicts, basket elective conflicts, and the 2+1 same day lecture restriction.
 
 \subsection{Feasibility Check}
 
-A dedicated ``Check Feasibility'' button constructs a full \texttt{SolverInput} from the current editor state, converts the slot positions into a \texttt{Solution} (Gene array), appends locked sessions from all other published timetables, and invokes the solver's \texttt{evaluate()} function. The result displays the total fitness score and the per-constraint violation breakdown, giving the administrator a precise understanding of remaining issues.
+The "Check Feasibility" button builds a comprehensive \texttt{SolverInput} using the current state of the editor, translates the slot positions to a \texttt{Solution} (Gene array), adds the locked sessions of all other timetables, and calls the solver's \texttt{evaluate()} method. The result shows the fitness value and violation count per constraint, which provides the administrator a detailed picture of unresolved problems.
 
 \subsection{LNS Auto-Fix}
 
-When conflicts exist, the administrator can invoke the \textbf{Large Neighbourhood Search (LNS)} auto-fix~\cite{shaw1998using}. This routine:
+If there are any conflicts, the administrator can call the \textbf{Large Neighborhood Search (LNS) Auto-Fix}~\cite{shaw1998using}, which:
+
 \begin{enumerate}
-    \item Identifies all session indices involved in any hard constraint violation (the ``clashing set'').
-    \item Iterates for up to 1500 attempts. In each attempt, a random session from the clashing set is selected and a random mutation (relocate, time shift, or room change) is applied.
-    \item If the mutation reduces the total fitness, the improved solution is accepted and the clashing set is refreshed.
-    \item The process terminates early if all hard violations reach zero.
+    \item Enumerates all indices corresponding to a session where there is any violation in the hard constraints (``clashing set''). 
+    \item Runs until at most 1500 attempts have been made. During each attempt, one randomly chosen session from the clashing set is randomly mutated (either relocate, reschedule, or room swap).
+    \item Should a mutation result in a higher total fitness value, the new solution is accepted and the clashing set is regenerated.  
+    \item Prematurely ends should all hard constraint violations be nullified. 
 \end{enumerate}
 
-The LNS targets only the problematic sessions rather than reoptimizing the entire schedule, making it significantly faster than a full solver run while preserving the administrator's manual adjustments to non-conflicting sessions. Figure~\ref{fig:lns_activity} illustrates this destroy-and-repair process.
+Because this LNS algorithm only considers the sessions involved in constraint violations, instead of optimizing all of the sessions as is done by running a complete solver, the LNS procedure is much faster but still retains the administrator's customizations to non-clashing sessions.
+
 
 \begin{figure}[htbp]
 \centering
