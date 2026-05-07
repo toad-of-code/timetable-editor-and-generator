@@ -98,7 +98,8 @@ The most important aspect of the current solution is its pure-TypeScript solver 
     \item \textbf{\texttt{constraints.ts}}: Checks the solutions based on ten hard and three soft constraints.
     \item \textbf{\texttt{mutations.ts}}: Contains five different mutation operators, such as session day changing and Gaussian time shift.
     \item \textbf{\texttt{solver.ts}}: Works as a control center, managing the (1+1)-ES process, elitism, and restarts from stagnation.
-    \item \textbf{\texttt{localSearch.ts
+    \item \textbf{\texttt{localSearch.ts}}: Applies local search operations to refine the schedule and resolve specific conflicts.
+\end{itemize}
 
 %-----------------------------------
 \section{External Integration: Reporting and Exporting}
@@ -107,4 +108,4 @@ For workflow efficiency purposes, the system has the following integrations with
 \begin{itemize}
     \item \textbf{Google Sheets API:} Enables exportation of schedules to Google Drive in a frozen header format with session coloring.
     \item \textbf{PDF Output:} Makes use of \texttt{html-to-image} and \texttt{jsPDF} libraries for snapshot output of the timetable into PDF form.
-\end{item
+\end{itemize}
