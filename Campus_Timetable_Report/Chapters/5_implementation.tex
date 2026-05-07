@@ -10,7 +10,7 @@
 
 The transition from data ingestion to the core solver introduces a highly constrained NP-hard optimization problem. The IIITA Timetabling System models this challenge mathematically, solving it via client-side heuristics. Rather than relying on traditional deterministic approaches which fail to scale, the system employs an evolutionary search mechanism. The engine processes high-dimensional inputs---comprising student cohorts, faculty assignments, and spatial capacities---and systematically navigates a vast, discontinuous search space to identify a globally optimal, conflict-free schedule.
 
-\begin{figure}[htbp]
+\begin{figure}[H]
 \centering
 \resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[
@@ -171,6 +171,11 @@ Once the solution space is feasible, the engine optimizes for schedule quality b
     \begin{equation}
         R(S) = \sum_{i} \left( \max(0, \alpha - u_i) + \max(0, u_i - \beta) \right)
     \end{equation}
+
+    \item \textbf{Professor Same-Half Compactness:} The solver encourages compact faculty schedules by penalizing cases where a professor must teach in both the morning and the afternoon on the same day. Let $\mathcal{T}_{p,d}$ be the set of time slots taught by professor $p$ on day $d$. We define the morning half $\mathcal{M} = \{1, 2, 3, 4\}$ and the afternoon half $\mathcal{A} = \{5, 6, 7, 8\}$. The faculty penalty $P(S)$ is:
+    \begin{equation}
+        P(S) = \sum_{p} \sum_{d} \mathbb{I}\left( (\mathcal{T}_{p,d} \cap \mathcal{M} \neq \emptyset) \land (\mathcal{T}_{p,d} \cap \mathcal{A} \neq \emptyset) \right)
+    \end{equation}
 \end{itemize}
 
 \section{The (1+1) Evolution Strategy Solver}
@@ -216,7 +221,7 @@ To dynamically balance global exploration and local exploitation, the solver imp
 
 In highly dense optimization landscapes, the algorithm may converge to a deep local optimum (a plateau). The engine mathematically tracks this stagnation. If $S_{parent}$ fails to improve for 15,000 consecutive generations, a stagnation recovery protocol is triggered. The current candidate is discarded, and maximum entropy is injected by generating a completely new randomized initial timetable.
 
-\begin{figure}[htbp]
+\begin{figure}[H]
 \centering
 \begin{tikzpicture}[
     node distance=1.1cm,
@@ -269,7 +274,7 @@ The user interface functions primarily as an engineering tool designed for granu
 
 The ``Auto-Fix'' feature applies a destroy-and-repair heuristic. Instead of recalculating the entire grid, it isolates the localized clashing subset $C \subseteq S$. The LNS algorithm iterates up to 1,500 times, randomly selecting a session $i \in C$, applying stochastic mutations (relocation, time shifts, or swaps), and evaluating the local differential fitness. If a localized mutation resolves the clash without violating surrounding sessions, the repair is committed.
 
-\begin{figure}[htbp]
+\begin{figure}[H]
 \centering
 \begin{tikzpicture}[
     node distance=1.1cm,
@@ -318,25 +323,34 @@ The implementation of the optimization engine drastically reduces the administra
 
 The solver demonstrates rapid convergence. The heavily weighted hard penalties force the evolution strategy to prioritize feasibility before aggressively optimizing the soft quality metrics.
 
-`[Insert Image: Fitness Score vs. Generations Graph]`
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{Figures/2.png} % Placeholder: Replace \fbox{...} with 
+\caption{Fitness Score vs. Generations }
+\label{fig:fitness_convergence}
+\end{figure}
 
 \subsection{The Interactive Drag-and-Drop Grid}
 
 The primary workspace visualizes the temporal matrix. It calculates multi-dimensional clashes in real-time, surfacing spatial and temporal overlaps through distinct programmatic warnings.
 
-`[Insert Image: Main UI Grid showing Clashes]`
-
-\subsection{LNS Auto-Fix Execution}
-
-When administrators execute the LNS repair routine, the interface explicitly highlights the target neighbourhood and dynamically resolves overlapping nodes without destabilizing the optimized framework.
-
-`[Insert Image: UI highlighting Auto-Fix suggestions]`
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{Figures/3.png} % Placeholder: Replace \fbox{...} with \includegraphics[width=\textwidth]{your_image.png}
+\caption{Main Editor UI Grid Surfacing Real-Time Clashes}
+\label{fig:main_editor_grid}
+\end{figure}
 
 \subsection{Export and PDF Generation}
 
 The final scheduling matrix is programmatically serialized into a high-fidelity PDF, leveraging DOM capture logic to bypass CSS layout constraints, ensuring the complete multidimensional array is rendered cleanly.
 
-`[Insert Image: Final PDF Timetable Output]`
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{Figures/1.png} % Placeholder: Replace \fbox{...} with 
+\caption{Final PDF Timetable Output Generated Client-Side}
+\label{fig:final_pdf_output}
+\end{figure}
 
 %-----------------------------------
 \section{Dynamic Time Grid Generation}

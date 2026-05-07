@@ -78,7 +78,7 @@ function AppContent() {
           </div>
           {!collapsed && (
             <span className="font-bold text-gray-800 text-sm leading-tight whitespace-nowrap">
-              Timetable<br />Manager
+              IIITA Timetable<br />Manager
             </span>
           )}
         </div>

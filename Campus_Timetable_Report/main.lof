@@ -8,10 +8,13 @@
 \contentsline {figure}{\numberline {4.3}{\ignorespaces Data Ingestion Pipeline for Excel Timetables}}{23}{figure.caption.55}%
 \addvspace {10\p@ }
 \contentsline {figure}{\numberline {5.1}{\ignorespaces Sequence Diagram: End-to-End Intelligent Generator Workflow}}{26}{figure.caption.63}%
-\contentsline {figure}{\numberline {5.2}{\ignorespaces Activity Diagram: (1+1)-ES Solver Execution Flow}}{33}{figure.caption.87}%
-\contentsline {figure}{\numberline {5.3}{\ignorespaces Activity Diagram: LNS Destroy-and-Repair Auto-Fix}}{34}{figure.caption.89}%
-\contentsline {figure}{\numberline {5.4}{\ignorespaces Inverted Logic Flowchart for the Free Room Finder Algorithm}}{39}{figure.caption.105}%
-\contentsline {figure}{\numberline {5.5}{\ignorespaces Hierarchical Structure of the Core React Components}}{40}{figure.caption.111}%
-\contentsline {figure}{\numberline {5.6}{\ignorespaces Activity Diagram: LNS Destroy-and-Repair Auto-Fix}}{45}{figure.caption.130}%
+\contentsline {figure}{\numberline {5.2}{\ignorespaces Activity Diagram: (1+1)-ES Solver Execution Flow}}{33}{figure.caption.88}%
+\contentsline {figure}{\numberline {5.3}{\ignorespaces Activity Diagram: LNS Destroy-and-Repair Auto-Fix}}{35}{figure.caption.90}%
+\contentsline {figure}{\numberline {5.4}{\ignorespaces Fitness Score vs. Generations }}{36}{figure.caption.93}%
+\contentsline {figure}{\numberline {5.5}{\ignorespaces Main Editor UI Grid Surfacing Real-Time Clashes}}{37}{figure.caption.95}%
+\contentsline {figure}{\numberline {5.6}{\ignorespaces Final PDF Timetable Output Generated Client-Side}}{38}{figure.caption.97}%
+\contentsline {figure}{\numberline {5.7}{\ignorespaces Inverted Logic Flowchart for the Free Room Finder Algorithm}}{41}{figure.caption.108}%
+\contentsline {figure}{\numberline {5.8}{\ignorespaces Hierarchical Structure of the Core React Components}}{42}{figure.caption.114}%
+\contentsline {figure}{\numberline {5.9}{\ignorespaces Activity Diagram: LNS Destroy-and-Repair Auto-Fix}}{48}{figure.caption.133}%
 \addvspace {10\p@ }
 \addvspace {10\p@ }
