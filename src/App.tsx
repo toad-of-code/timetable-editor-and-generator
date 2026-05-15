@@ -10,6 +10,10 @@ import { FreeRoomViewer } from './components/FreeRoomViewer';
 import { GeneratorView } from './components/GeneratorView';
 import { EditorView } from './components/EditorView';
 import { ReportCardView } from './components/ReportCardView';
+import { ManageProfessors } from './components/ManageProfessors';
+import { ManageSubjects } from './components/ManageSubjects';
+import { ManageRooms } from './components/ManageRooms';
+import { ManageSemesterMapping } from './components/ManageSemesterMapping';
 import { Toaster } from 'react-hot-toast';
 
 import {
@@ -26,10 +30,14 @@ import {
   ChevronRight,
   CalendarDays,
   Pencil,
+  UserCog,
+  BookOpen,
+  Building2,
+  GitBranch,
 } from 'lucide-react';
 import { supabase } from './lib/supabase';
 
-type ViewType = 'import' | 'student' | 'prof' | 'room' | 'master-room' | 'free-room' | 'generator' | 'editor' | 'report-card';
+type ViewType = 'import' | 'student' | 'prof' | 'room' | 'master-room' | 'free-room' | 'generator' | 'editor' | 'report-card' | 'manage-professors' | 'manage-subjects' | 'manage-rooms' | 'manage-mapping';
 
 interface NavItem {
   id: ViewType;
@@ -47,10 +55,14 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'master-room', label: 'Occupancy', icon: <LayoutGrid size={20} /> },
   { id: 'free-room', label: 'Free Rooms', icon: <Coffee size={20} /> },
   { id: 'report-card', label: 'Semester Subject List', icon: <ClipboardList size={20} /> },
+  { id: 'manage-professors', label: 'Manage Professors', icon: <UserCog size={20} /> },
+  { id: 'manage-subjects', label: 'Manage Subjects', icon: <BookOpen size={20} /> },
+  { id: 'manage-rooms', label: 'Manage Rooms', icon: <Building2 size={20} /> },
+  { id: 'manage-mapping', label: 'Semester Mapping', icon: <GitBranch size={20} /> },
 ];
 
 // Separator appears before these items
-const SEPARATOR_BEFORE = new Set<ViewType>(['master-room']);
+const SEPARATOR_BEFORE = new Set<ViewType>(['master-room', 'manage-professors']);
 
 function AppContent() {
   const { user, loading } = useAuth();
@@ -142,6 +154,10 @@ function AppContent() {
           {view === 'master-room' && <MasterRoomViewer />}
           {view === 'free-room' && <FreeRoomViewer />}
           {view === 'report-card' && <ReportCardView />}
+          {view === 'manage-professors' && <ManageProfessors />}
+          {view === 'manage-subjects' && <ManageSubjects />}
+          {view === 'manage-rooms' && <ManageRooms />}
+          {view === 'manage-mapping' && <ManageSemesterMapping />}
         </main>
       </div>
 
