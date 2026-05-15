@@ -475,7 +475,6 @@ export function runFullLNS(
 
         // --- Move Propagation for Synced Baskets (MDM, HSMC) ---
         if (isSyncedBasket(session.basketName)) {
-            const groupKey = `${session.basketName}|${session.slotType}|${session.electiveSlotIndex}`;
             for (let i = 0; i < input.sessions.length; i++) {
                 const s = input.sessions[i];
                 if (i !== idx && s.basketName === session.basketName && s.slotType === session.slotType && s.electiveSlotIndex === session.electiveSlotIndex) {

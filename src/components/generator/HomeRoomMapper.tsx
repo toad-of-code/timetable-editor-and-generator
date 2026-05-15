@@ -8,7 +8,7 @@ interface Props {
     onChange: (groupId: string, roomId: string) => void;
 }
 
-function CascadingRoomSelect({ group, rooms, value, onChange }: { group: Group, rooms: Room[], value: string, onChange: (val: string) => void }) {
+function CascadingRoomSelect({ rooms, value, onChange }: { group: Group, rooms: Room[], value: string, onChange: (val: string) => void }) {
     const selectedRoom = rooms.find(r => r.id === value);
     const [type, setType] = useState<string>(selectedRoom ? selectedRoom.room_type : 'Lecture');
     
