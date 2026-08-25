@@ -3,7 +3,7 @@ import {
   UserCog, Plus, Pencil, Trash2, Save, X, Search,
   Loader2, AlertCircle, RefreshCw, ChevronUp, ChevronDown, BookOpen,
 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import * as api from '../services/timetableService';
 import toast from 'react-hot-toast';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -41,10 +41,7 @@ function ExpertisePanel({ professorId, allSubjects }: { professorId: string; all
 
   const fetch = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from('professor_expertise')
-      .select('id, subject_id, preference_level, subject:subject_id (code, name)')
-      .eq('professor_id', professorId);
+    const { data } = await api.fetchProfessorExpertiseByProfessor(professorId);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const mapped = (data ?? []).map((r: any) => ({
       id: r.id,
@@ -62,7 +59,7 @@ function ExpertisePanel({ professorId, allSubjects }: { professorId: string; all
   const handleAdd = async () => {
     if (!addSubjectId) { toast.error('Select a subject'); return; }
     setAddLoading(true);
-    const { error } = await supabase.from('professor_expertise').insert({
+    const { error } = await api.insertProfessorExpertise({
       professor_id: professorId, subject_id: addSubjectId, preference_level: addPref,
     });
     setAddLoading(false);
@@ -70,13 +67,13 @@ function ExpertisePanel({ professorId, allSubjects }: { professorId: string; all
   };
 
   const handleUpdatePref = async (id: string, pref: number) => {
-    const { error } = await supabase.from('professor_expertise').update({ preference_level: pref }).eq('id', id);
+    const { error } = await api.updateProfessorExpertisePref(id, pref);
     if (error) toast.error(error.message); else fetch();
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm('Remove this expertise?')) return;
-    const { error } = await supabase.from('professor_expertise').delete().eq('id', id);
+    const { error } = await api.deleteProfessorExpertise(id);
     if (error) toast.error(error.message); else { toast.success('Removed'); fetch(); }
   };
 
@@ -182,8 +179,8 @@ export function ManageProfessors() {
   const fetchProfessors = useCallback(async () => {
     setLoading(true); setError(null);
     const [{ data, error: err }, { data: subs }] = await Promise.all([
-      supabase.from('professors').select('*').order('name', { ascending: true }),
-      supabase.from('subjects').select('id, code, name').order('code'),
+      api.fetchProfessors(),
+      api.fetchSubjectsForManage(),
     ]);
     if (err) setError(err.message); else setProfessors(data ?? []);
     setAllSubjects(subs ?? []);
@@ -195,7 +192,7 @@ export function ManageProfessors() {
   const handleAdd = async () => {
     if (!addForm.name.trim()) { toast.error('Name is required'); return; }
     setAddLoading(true);
-    const { error: err } = await supabase.from('professors').insert({
+    const { error: err } = await api.insertProfessor({
       name: addForm.name.trim(), email: addForm.email.trim() || null, department: addForm.department.trim() || null,
     });
     setAddLoading(false);
@@ -208,16 +205,16 @@ export function ManageProfessors() {
   const handleUpdate = async () => {
     if (!editId || !editForm.name.trim()) { toast.error('Name is required'); return; }
     setEditLoading(true);
-    const { error: err } = await supabase.from('professors').update({
+    const { error: err } = await api.updateProfessor(editId, {
       name: editForm.name.trim(), email: editForm.email.trim() || null, department: editForm.department.trim() || null,
-    }).eq('id', editId);
+    });
     setEditLoading(false);
     if (err) toast.error(`Failed: ${err.message}`); else { toast.success('Updated'); cancelEdit(); fetchProfessors(); }
   };
 
   const handleDelete = async (p: Professor) => {
     if (!confirm(`Delete "${p.name}"?`)) return;
-    const { error: err } = await supabase.from('professors').delete().eq('id', p.id);
+    const { error: err } = await api.deleteProfessor(p.id);
     if (err) toast.error(`Failed: ${err.message}`); else { toast.success(`Deleted`); fetchProfessors(); }
   };
 

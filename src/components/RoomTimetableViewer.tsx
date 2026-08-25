@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { supabase } from '../lib/supabase';
+import * as api from '../services/timetableService';
 import { Loader2, ArrowLeft, Download, Filter, FileSpreadsheet, Check, CheckSquare, Square } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import jsPDF from 'jspdf';
@@ -70,7 +70,7 @@ export function RoomTimetableViewer({ onBack }: RoomTimetableViewerProps) {
     const loadAllData = async () => {
       setLoading(true);
       try {
-        const { data: published } = await supabase.from('timetables').select('id').eq('status', 'published');
+        const { data: published } = await api.fetchPublishedTimetableIds();
         if (!published || published.length === 0) {
           setAllSlots([]);
           setAvailableRooms([]);
@@ -79,13 +79,7 @@ export function RoomTimetableViewer({ onBack }: RoomTimetableViewerProps) {
         }
         const pubIds = published.map(p => p.id);
 
-        const { data, error } = await supabase
-          .from('timetable_slots')
-          .select(`
-            id, day_of_week, start_time, end_time, slot_type,
-            subjects (code, name), professors (name), rooms (name), student_groups (name, semester)
-          `)
-          .in('timetable_id', pubIds);
+        const { data, error } = await api.fetchAllPublishedSlots(pubIds);
 
         if (error) throw error;
 

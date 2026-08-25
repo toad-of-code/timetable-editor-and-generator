@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
+import * as api from '../services/timetableService';
 import { Download, ArrowLeft, Loader2, MapPin, Building2 } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import jsPDF from 'jspdf';
@@ -81,13 +81,13 @@ export function MasterRoomViewer({ onBack }: MasterRoomViewerProps) {
     setLoading(true);
     try {
       // Always fetch ALL rooms from the master rooms table for the building filter
-      const { data: roomData } = await supabase.from('rooms').select('name').order('name');
+      const { data: roomData } = await api.fetchAllRoomNames();
       const roomNames = (roomData || []).map((r: { name: string }) => r.name);
       const buildings = Array.from(new Set(roomNames.map(r => getBuildingName(r)))).sort();
       setAvailableBuildings(buildings);
 
       // Then fetch occupancy data from published timetables (if any)
-      const { data: published } = await supabase.from('timetables').select('id').eq('status', 'published');
+      const { data: published } = await api.fetchPublishedTimetableIds();
       if (!published || published.length === 0) {
         setAllSlots([]);
         setLoading(false);
@@ -95,13 +95,7 @@ export function MasterRoomViewer({ onBack }: MasterRoomViewerProps) {
       }
       const pubIds = published.map(p => p.id);
 
-      const { data, error } = await supabase
-        .from('timetable_slots')
-        .select(`
-          id, day_of_week, start_time, end_time, slot_type,
-          subjects (code, name), professors (name), rooms (name, room_type), student_groups (name, semester)
-        `)
-        .in('timetable_id', pubIds);
+      const { data, error } = await api.fetchAllPublishedSlots(pubIds);
 
       if (error) throw error;
 

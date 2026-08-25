@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { supabase } from '../lib/supabase';
+import * as api from '../services/timetableService';
 import { Loader2, ArrowLeft, Download, Filter, AlertTriangle, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import jsPDF from 'jspdf';
@@ -66,7 +66,7 @@ export const TimetableViewer: React.FC<ViewerProps> = ({ timetableId, onBack }) 
   // 1. Fetch Timetables
   useEffect(() => {
     const fetchTTs = async () => {
-      const { data } = await supabase.from('timetables').select('id, name, semester').order('created_at', { ascending: false });
+      const { data } = await api.fetchTimetables();
       if (data) {
         setTimetables(data);
         if (!selectedTimetableId && data.length > 0) setSelectedTimetableId(data[0].id);
@@ -84,16 +84,10 @@ export const TimetableViewer: React.FC<ViewerProps> = ({ timetableId, onBack }) 
     setLoading(true);
 
     const fetchData = async () => {
-      const { data: tt } = await supabase.from('timetables').select('name').eq('id', selectedTimetableId).single();
+      const { data: tt } = await api.getTimetableName(selectedTimetableId);
       if (tt) setTimetableName(tt.name);
 
-      const { data, error } = await supabase
-        .from('timetable_slots')
-        .select(`
-          id, day_of_week, start_time, end_time, slot_type,
-          subjects (code, name, subject_type), professors (name), rooms (name), student_groups (name)
-        `)
-        .eq('timetable_id', selectedTimetableId);
+      const { data, error } = await api.fetchViewerSlots(selectedTimetableId);
 
       if (error) { setLoading(false); return; }
 

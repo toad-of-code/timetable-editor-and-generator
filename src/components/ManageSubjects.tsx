@@ -3,7 +3,7 @@ import {
   BookOpen, Plus, Pencil, Trash2, Save, X, Search,
   Loader2, AlertCircle, RefreshCw, ChevronUp, ChevronDown,
 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import * as api from '../services/timetableService';
 import toast from 'react-hot-toast';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -91,10 +91,7 @@ export function ManageSubjects() {
   const fetchSubjects = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const { data, error: err } = await supabase
-      .from('subjects')
-      .select('*')
-      .order('code', { ascending: true });
+    const { data, error: err } = await api.fetchAllSubjects();
 
     if (err) {
       setError(err.message);
@@ -114,7 +111,7 @@ export function ManageSubjects() {
       return;
     }
     setAddLoading(true);
-    const { error: err } = await supabase.from('subjects').insert({
+    const { error: err } = await api.insertSubject({
       code: addForm.code.trim(),
       name: addForm.name.trim(),
       lectures: addForm.lectures,
@@ -166,9 +163,7 @@ export function ManageSubjects() {
       return;
     }
     setEditLoading(true);
-    const { error: err } = await supabase
-      .from('subjects')
-      .update({
+    const { error: err } = await api.updateSubject(editId, {
         code: editForm.code.trim(),
         name: editForm.name.trim(),
         lectures: editForm.lectures,
@@ -178,8 +173,7 @@ export function ManageSubjects() {
         credits: editForm.credits,
         subject_type: editForm.subject_type,
         elective_group: editForm.subject_type === 'Elective' ? (editForm.elective_group.trim() || null) : null,
-      })
-      .eq('id', editId);
+      });
     setEditLoading(false);
 
     if (err) {
@@ -196,10 +190,7 @@ export function ManageSubjects() {
   const handleDelete = async (sub: Subject) => {
     if (!confirm(`Delete subject "${sub.code} — ${sub.name}"? This cannot be undone.`)) return;
 
-    const { error: err } = await supabase
-      .from('subjects')
-      .delete()
-      .eq('id', sub.id);
+    const { error: err } = await api.deleteSubject(sub.id);
 
     if (err) {
       toast.error(`Failed to delete: ${err.message}`);

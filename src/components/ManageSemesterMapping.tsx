@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { GitBranch, Plus, Trash2, Save, X, Loader2, AlertCircle, RefreshCw, Pencil } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import * as api from '../services/timetableService';
 import toast from 'react-hot-toast';
 
 interface Cluster { id: string; batch_year: number; semester_number: number; department: string | null; is_active: boolean; }
@@ -42,8 +42,8 @@ export function ManageSemesterMapping() {
   const fetchClusters = useCallback(async () => {
     setLoading(true); setError(null);
     const [{ data: cl, error: e1 }, { data: subs }] = await Promise.all([
-      supabase.from('semester_clusters').select('*').order('semester_number'),
-      supabase.from('subjects').select('id, code, name, subject_type').order('code'),
+      api.fetchSemesterClusters(),
+      api.fetchSubjectsWithType(),
     ]);
     if (e1) setError(e1.message); else setClusters(cl ?? []);
     setAllSubjects(subs ?? []);
@@ -55,10 +55,7 @@ export function ManageSemesterMapping() {
   const fetchMappings = useCallback(async (clusterId: string) => {
     if (!clusterId) { setMappings([]); return; }
     setMapLoading(true);
-    const { data, error: err } = await supabase
-      .from('cluster_requirements')
-      .select('id, subject_id, elective_basket, estimated_enrollment, subject:subject_id (code, name, subject_type)')
-      .eq('cluster_id', clusterId);
+    const { data, error: err } = await api.fetchClusterRequirementsForMapping(clusterId);
     if (err) toast.error(err.message);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     setMappings((data ?? []).map((r: any) => ({
@@ -74,7 +71,7 @@ export function ManageSemesterMapping() {
   // ── Cluster CRUD ──
   const handleAddCluster = async () => {
     setClusterSaving(true);
-    const { error: err } = await supabase.from('semester_clusters').insert({
+    const { error: err } = await api.insertSemesterCluster({
       batch_year: clusterForm.batch_year, semester_number: clusterForm.semester_number,
       department: clusterForm.department.trim() || 'IT', is_active: true,
     });
@@ -84,22 +81,22 @@ export function ManageSemesterMapping() {
 
   const handleUpdateCluster = async () => {
     if (!editClusterId) return;
-    const { error: err } = await supabase.from('semester_clusters').update({
+    const { error: err } = await api.updateSemesterCluster(editClusterId, {
       batch_year: editClusterForm.batch_year, semester_number: editClusterForm.semester_number,
       department: editClusterForm.department.trim() || 'IT',
-    }).eq('id', editClusterId);
+    });
     if (err) toast.error(err.message); else { toast.success('Cluster updated'); setEditClusterId(null); fetchClusters(); }
   };
 
   const handleDeleteCluster = async (id: string) => {
     if (!confirm('Delete this cluster and all its subject mappings?')) return;
-    await supabase.from('cluster_requirements').delete().eq('cluster_id', id);
-    const { error: err } = await supabase.from('semester_clusters').delete().eq('id', id);
+    await api.deleteClusterRequirementsByCluster(id);
+    const { error: err } = await api.deleteSemesterCluster(id);
     if (err) toast.error(err.message); else { toast.success('Cluster deleted'); if (selectedId === id) setSelectedId(''); fetchClusters(); }
   };
 
   const handleToggleActive = async (c: Cluster) => {
-    const { error: err } = await supabase.from('semester_clusters').update({ is_active: !c.is_active }).eq('id', c.id);
+    const { error: err } = await api.updateSemesterCluster(c.id, { is_active: !c.is_active });
     if (err) toast.error(err.message); else fetchClusters();
   };
 
@@ -107,7 +104,7 @@ export function ManageSemesterMapping() {
   const handleAddMapping = async () => {
     if (!addSubjectId || !selectedId) { toast.error('Select a subject'); return; }
     setAddLoading(true);
-    const { error: err } = await supabase.from('cluster_requirements').insert({
+    const { error: err } = await api.insertClusterRequirement({
       cluster_id: selectedId, subject_id: addSubjectId,
       elective_basket: addBasket.trim() || null, estimated_enrollment: addEnrollment,
     });
@@ -119,15 +116,15 @@ export function ManageSemesterMapping() {
 
   const handleUpdateMapping = async () => {
     if (!editMapId) return;
-    const { error: err } = await supabase.from('cluster_requirements').update({
+    const { error: err } = await api.updateClusterRequirement(editMapId, {
       elective_basket: editBasket.trim() || null, estimated_enrollment: editEnrollment,
-    }).eq('id', editMapId);
+    });
     if (err) toast.error(err.message); else { toast.success('Updated'); setEditMapId(null); fetchMappings(selectedId); }
   };
 
   const handleDeleteMapping = async (id: string) => {
     if (!confirm('Remove this subject from the semester?')) return;
-    const { error: err } = await supabase.from('cluster_requirements').delete().eq('id', id);
+    const { error: err } = await api.deleteClusterRequirement(id);
     if (err) toast.error(err.message); else { toast.success('Removed'); fetchMappings(selectedId); }
   };
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
+import * as api from '../services/timetableService';
 import type { EditorSlot } from '../solver/localSearch';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -81,12 +81,9 @@ export function useEditorData(initialTimetableId?: string): EditorData {
             setError(null);
             try {
                 const [ttRes, roomRes, profRes] = await Promise.all([
-                    supabase
-                        .from('timetables')
-                        .select('id, name, semester, status, academic_year, created_at, published_at, lunch_start, lunch_end')
-                        .order('created_at', { ascending: false }),
-                    supabase.from('rooms').select('id, name, room_type, capacity').order('name'),
-                    supabase.from('professors').select('id, name').order('name'),
+                    api.fetchTimetables(),
+                    api.fetchRoomsForEditor(),
+                    api.fetchProfessorsForEditor(),
                 ]);
                 if (ttRes.error) throw ttRes.error;
                 if (roomRes.error) throw roomRes.error;
@@ -132,27 +129,7 @@ export function useEditorData(initialTimetableId?: string): EditorData {
             setError(null);
             try {
                 // Load slots with joined names
-                const { data, error: slotErr } = await supabase
-                    .from('timetable_slots')
-                    .select(`
-            id,
-            timetable_id,
-            subject_id,
-            professor_id,
-            room_id,
-            student_group_id,
-            day_of_week,
-            start_time,
-            end_time,
-            slot_type,
-            subject:subject_id (code, name, subject_type, elective_group),
-            professor:professor_id (name),
-            room:room_id (name),
-            student_group:student_group_id (name)
-          `)
-                    .eq('timetable_id', selectedTimetableId)
-                    .order('day_of_week')
-                    .order('start_time');
+                const { data, error: slotErr } = await api.fetchTimetableSlots(selectedTimetableId);
 
                 if (slotErr) throw slotErr;
                 if (cancelled) return;
@@ -196,28 +173,7 @@ export function useEditorData(initialTimetableId?: string): EditorData {
         setSaving(true);
         setError(null);
         try {
-            // Delete existing slots for this timetable and re-insert
-            const { error: delErr } = await supabase
-                .from('timetable_slots')
-                .delete()
-                .eq('timetable_id', selectedTimetableId);
-            if (delErr) throw delErr;
-
-            const rows = editedSlots.map(s => ({
-                timetable_id: s.timetable_id,
-                subject_id: s.subject_id,
-                professor_id: s.professor_id,
-                room_id: s.room_id,
-                student_group_id: s.student_group_id,
-                day_of_week: s.day_of_week,
-                start_time: s.start_time,
-                end_time: s.end_time,
-                slot_type: s.slot_type,
-            }));
-
-            const { error: insErr } = await supabase
-                .from('timetable_slots')
-                .insert(rows);
+            const { error: insErr } = await api.replaceTimetableSlots(selectedTimetableId, editedSlots);
             if (insErr) throw insErr;
 
             // Re-fetch slots from DB to get fresh UUIDs (Bug #2 fix).
@@ -237,10 +193,7 @@ export function useEditorData(initialTimetableId?: string): EditorData {
         setPublishing(true);
         setError(null);
         try {
-            const { error: pubErr } = await supabase
-                .from('timetables')
-                .update({ status: 'published', published_at: new Date().toISOString() })
-                .eq('id', selectedTimetableId);
+            const { error: pubErr } = await api.publishTimetableStatus(selectedTimetableId);
             if (pubErr) throw pubErr;
 
             // Update local state

@@ -32,3 +32,10 @@ Thumbs.db
 client_secret_*.json
 *.txt
 !requirements.txt
+graphify-out/
+
+.gemini/
+GEMINI.md
+
+refactor.cjs
+*.zip

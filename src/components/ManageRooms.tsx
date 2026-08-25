@@ -3,7 +3,7 @@ import {
   Building2, Plus, Pencil, Trash2, Save, X, Search,
   Loader2, AlertCircle, RefreshCw, ChevronUp, ChevronDown,
 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import * as api from '../services/timetableService';
 import toast from 'react-hot-toast';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -86,10 +86,7 @@ export function ManageRooms() {
   const fetchRooms = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const { data, error: err } = await supabase
-      .from('rooms')
-      .select('*')
-      .order('name', { ascending: true });
+    const { data, error: err } = await api.fetchRooms();
 
     if (err) {
       setError(err.message);
@@ -113,7 +110,7 @@ export function ManageRooms() {
       return;
     }
     setAddLoading(true);
-    const { error: err } = await supabase.from('rooms').insert({
+    const { error: err } = await api.insertRoom({
       name: addForm.name.trim(),
       capacity: addForm.capacity,
       room_type: addForm.room_type,
@@ -153,14 +150,11 @@ export function ManageRooms() {
       return;
     }
     setEditLoading(true);
-    const { error: err } = await supabase
-      .from('rooms')
-      .update({
+    const { error: err } = await api.updateRoom(editId, {
         name: editForm.name.trim(),
         capacity: editForm.capacity,
         room_type: editForm.room_type,
-      })
-      .eq('id', editId);
+      });
     setEditLoading(false);
 
     if (err) {
@@ -177,10 +171,7 @@ export function ManageRooms() {
   const handleDelete = async (room: Room) => {
     if (!confirm(`Delete room "${room.name}"? This cannot be undone.`)) return;
 
-    const { error: err } = await supabase
-      .from('rooms')
-      .delete()
-      .eq('id', room.id);
+    const { error: err } = await api.deleteRoom(room.id);
 
     if (err) {
       toast.error(`Failed to delete: ${err.message}`);

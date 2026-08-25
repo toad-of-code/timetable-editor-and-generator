@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
+import * as api from '../services/timetableService';
 import { Download, ArrowLeft, Loader2, Building2, FileSpreadsheet } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import jsPDF from 'jspdf';
@@ -55,21 +55,18 @@ export function FreeRoomViewer({ onBack }: FreeRoomViewerProps) {
     setLoading(true);
     try {
       // Always fetch ALL rooms from the master rooms table
-      const { data: roomData } = await supabase.from('rooms').select('name, room_type').order('name');
+      const { data: roomData } = await api.fetchAllRoomNamesAndTypes();
       const rooms = (roomData || []).map((r: { name: string, room_type: string }) => ({ name: r.name, room_type: r.room_type }));
       setAllRooms(rooms);
       const buildings = Array.from(new Set(rooms.map(r => getBuildingName(r.name)))).sort();
       setAvailableBuildings(buildings);
 
       // Then fetch busy slots from published timetables (if any)
-      const { data: published } = await supabase.from('timetables').select('id').eq('status', 'published');
+      const { data: published } = await api.fetchPublishedTimetableIds();
       if (published && published.length > 0) {
         const pubIds = published.map(p => p.id);
 
-        const { data: slotData } = await supabase
-          .from('timetable_slots')
-          .select(`day_of_week, start_time, end_time, rooms (name)`)
-          .in('timetable_id', pubIds);
+        const { data: slotData } = await api.fetchAllPublishedSlots(pubIds);
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const cleanBusy = (slotData || []).filter((s: any) => s.rooms?.name).map((s: any) => ({

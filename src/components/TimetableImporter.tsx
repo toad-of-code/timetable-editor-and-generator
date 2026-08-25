@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import * as XLSX from 'xlsx';
-import { supabase } from '../lib/supabase';
+import * as api from '../services/timetableService';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Upload, Database, Loader2, FileSpreadsheet,
@@ -647,7 +647,7 @@ const TimetableImporter: React.FC<Props> = ({ onNavigate }) => {
       addLog(`📦 Found: ${uniqueSubjects.length} Subjs, ${uniqueProfs.length} Profs, ${uniqueRooms.length} Rooms, ${uniqueGroups.length} Groups`);
 
       if (uniqueSubjects.length > 0) {
-        const { error: subErr } = await supabase.from('subjects').upsert(
+        const { error: subErr } = await api.upsertSubjects(
           uniqueSubjects.map(c => {
             const ltps = ltpsMap[c];
             const credits = ltps ? ltps.L + ltps.T + (ltps.P / 2) + ltps.S : 4;
@@ -672,7 +672,7 @@ const TimetableImporter: React.FC<Props> = ({ onNavigate }) => {
 
       if (uniqueProfs.length > 0) {
         const distinctNames = Array.from(new Set([...uniqueProfs, 'Unknown']));
-        const { error: profErr } = await supabase.from('professors').upsert(
+        const { error: profErr } = await api.upsertProfessors(
           distinctNames.map(n => {
             let clean = n.replace(/^(Prof\.|Dr\.|Mr\.|Mrs\.|Ms\.)\s*/i, '');
             clean = clean.replace(/[^a-zA-Z\s]/g, '');
@@ -694,7 +694,7 @@ const TimetableImporter: React.FC<Props> = ({ onNavigate }) => {
           roomTypesMap[slot.room].add(slot.type);
         }
 
-        const { error: roomErr } = await supabase.from('rooms').upsert(
+        const { error: roomErr } = await api.upsertRooms(
           uniqueRooms.map(n => {
             const types = roomTypesMap[n];
             const isPurelyPractical = types && types.size === 1 && types.has('Practical');
@@ -706,7 +706,7 @@ const TimetableImporter: React.FC<Props> = ({ onNavigate }) => {
       }
 
       if (uniqueGroups.length > 0) {
-        const { error: grpErr } = await supabase.from('student_groups').upsert(
+        const { error: grpErr } = await api.upsertStudentGroups(
           uniqueGroups.map(n => ({
             name: n,
             semester: safeSemester,
@@ -720,12 +720,10 @@ const TimetableImporter: React.FC<Props> = ({ onNavigate }) => {
 
       addLog(`✅ All dependencies synced.`);
 
-      const { data: dbSubjects } = await supabase.from('subjects').select('id, code');
-      const { data: dbProfs } = await supabase.from('professors').select('id, name');
-      const { data: dbRooms } = await supabase.from('rooms').select('id, name');
-      const { data: dbGroups } = await supabase.from('student_groups')
-        .select('id, name')
-        .eq('semester', safeSemester);
+      const { data: dbSubjects } = await api.fetchSubjectsForImport();
+      const { data: dbProfs } = await api.fetchProfessorsForImport();
+      const { data: dbRooms } = await api.fetchRoomsForImport();
+      const { data: dbGroups } = await api.fetchStudentGroupsBySemester(safeSemester);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const findId = (list: any[], key: string, val: string) =>
@@ -735,14 +733,14 @@ const TimetableImporter: React.FC<Props> = ({ onNavigate }) => {
 
       addLog(`🧹 Cleaning old slots for Sem ${safeSemester}...`);
 
-      const { data: oldTTs } = await supabase.from('timetables').select('id').eq('semester', safeSemester);
+      const { data: oldTTs } = await api.fetchTimetablesBySemester(safeSemester);
       if (oldTTs && oldTTs.length > 0) {
         const ids = oldTTs.map(t => t.id);
-        await supabase.from('timetable_slots').delete().in('timetable_id', ids);
-        await supabase.from('timetables').delete().in('id', ids);
+        await api.deleteTimetableSlotsByTimetableIds(ids);
+        await api.deleteTimetablesByIds(ids);
       }
 
-      const { data: ttData, error: ttError } = await supabase.from('timetables').insert({
+      const { data: ttData, error: ttError } = await api.insertTimetable({
         name: tableName || `Imported Sem ${safeSemester}`,
         academic_year: '2025-26',
         semester: safeSemester,
@@ -750,8 +748,7 @@ const TimetableImporter: React.FC<Props> = ({ onNavigate }) => {
         lunch_start: '13:00',
         lunch_end: '14:30',
         created_by: user.id
-      }).select('id').single();
-
+      });
       if (ttError) throw ttError;
 
       addLog('🚀 Mapping slots...');
@@ -779,7 +776,7 @@ const TimetableImporter: React.FC<Props> = ({ onNavigate }) => {
       }).filter(Boolean);
 
       if (slotsToInsert.length > 0) {
-        const { error: insertErr } = await supabase.from('timetable_slots').insert(slotsToInsert);
+        const { error: insertErr } = await api.insertTimetableSlots(slotsToInsert);
         if (insertErr) throw insertErr;
         addLog(`🎉 SUCCESS! Inserted ${slotsToInsert.length} slots.`);
         if (dropCount > 0) addLog(`⚠️ Warning: ${dropCount} slots were dropped.`);
@@ -792,19 +789,12 @@ const TimetableImporter: React.FC<Props> = ({ onNavigate }) => {
       const batchYear = new Date().getFullYear();
 
       // Delete existing cluster for this semester+dept so we get a clean upsert
-      const { data: existingClusters } = await supabase
-        .from('semester_clusters')
-        .select('id')
-        .eq('semester_number', safeSemester)
-        .eq('department', 'IT');
+      const { data: existingClusters } = await api.fetchSemesterClusterBySemesterAndDept(safeSemester, 'IT');
 
       let clusterId: string | null = existingClusters?.[0]?.id ?? null;
 
       if (!clusterId) {
-        const { data: clusterData, error: clusterErr } = await supabase
-          .from('semester_clusters')
-          .insert({ batch_year: batchYear, semester_number: safeSemester, department: 'IT', is_active: true })
-          .select('id').single();
+        const { data: clusterData, error: clusterErr } = await api.insertSemesterClusterAndReturnId({ batch_year: batchYear, semester_number: safeSemester, department: 'IT', is_active: true });
         if (clusterErr) throw new Error(`Cluster Error: ${clusterErr.message}`);
         clusterId = clusterData.id;
         addLog(`✅ Created cluster: Batch ${batchYear}, Sem ${safeSemester}`);
@@ -825,7 +815,7 @@ const TimetableImporter: React.FC<Props> = ({ onNavigate }) => {
         }
 
         // Remove old requirements for this cluster then re-insert fresh
-        await supabase.from('cluster_requirements').delete().eq('cluster_id', clusterId);
+        await api.deleteClusterRequirementsByCluster(clusterId);
 
         // Deduplicate subject codes from parsed slots
         const uniqueCodes = [...new Set(parsedSlots.map(s => s.subjectCode))];
@@ -847,7 +837,7 @@ const TimetableImporter: React.FC<Props> = ({ onNavigate }) => {
           .filter(Boolean);
 
         if (crRows.length > 0) {
-          const { error: crErr } = await supabase.from('cluster_requirements').insert(crRows);
+          const { error: crErr } = await api.insertClusterRequirements(crRows);
           if (crErr) throw new Error(`Cluster Requirements Error: ${crErr.message}`);
           addLog(`✅ Linked ${crRows.length} subjects to cluster (with basket info).`);
         }
@@ -877,9 +867,9 @@ const TimetableImporter: React.FC<Props> = ({ onNavigate }) => {
             .map(code => findId(dbSubjects, 'code', code))
             .filter(Boolean);
           if (importedSubjectIds.length > 0) {
-            await supabase.from('professor_expertise').delete().in('subject_id', importedSubjectIds);
+            await api.deleteProfessorExpertiseBySubjects(importedSubjectIds);
           }
-          const { error: expErr } = await supabase.from('professor_expertise').insert(expertiseRows);
+          const { error: expErr } = await api.insertProfessorExpertises(expertiseRows);
           if (expErr) throw new Error(`Expertise Error: ${expErr.message}`);
           addLog(`✅ Saved ${expertiseRows.length} professor→subject expertise links.`);
         }

@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
-
+import * as api from '../services/timetableService';
 // ─── Shared Types ──────────────────────────────────────────────────────────────
 // These are exported so sub-components can import them instead of re-declaring.
 
@@ -96,13 +95,9 @@ export function useGeneratorData(selectedClusterId: string): GeneratorData {
             try {
                 setLoading(true);
                 const [clustersRes, roomsRes, profsRes] = await Promise.all([
-                    supabase
-                        .from('semester_clusters')
-                        .select('*')
-                        .eq('is_active', true)
-                        .order('batch_year', { ascending: false }),
-                    supabase.from('rooms').select('*').order('name'),
-                    supabase.from('professors').select('*').order('name'),
+                    api.fetchActiveClusters(),
+                    api.fetchRooms(),
+                    api.fetchProfessors(),
                 ]);
                 if (clustersRes.error) throw clustersRes.error;
                 if (roomsRes.error) throw roomsRes.error;
@@ -136,18 +131,9 @@ export function useGeneratorData(selectedClusterId: string): GeneratorData {
                 if (!cluster) return;
 
                 const [reqRes, groupRes, expertiseRes] = await Promise.all([
-                    supabase
-                        .from('cluster_requirements')
-                        .select('elective_basket, estimated_enrollment, subject:subject_id (id, code, name, credits, subject_type, lectures, tutorials, practicals, practical_duration)')
-                        .eq('cluster_id', selectedClusterId),
-                    supabase
-                        .from('student_groups')
-                        .select('*')
-                        .eq('semester', cluster.semester_number)
-                        .order('name'),
-                    supabase
-                        .from('professor_expertise')
-                        .select('subject_id, professor:professor_id (id, name, department)'),
+                    api.fetchClusterRequirements(selectedClusterId),
+                    api.fetchStudentGroupsBySemester(cluster.semester_number),
+                    api.fetchProfessorExpertise(),
                 ]);
 
                 if (reqRes.error) throw reqRes.error;
